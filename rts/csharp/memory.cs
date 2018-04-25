@@ -406,56 +406,111 @@ T indexArray<T>(byte[] src, int offset, Func<byte[],int, T> converter)
 
 void writeScalarArray(byte[] dest, int offset, sbyte value)
 {
-    var asBytes = BitConverter.GetBytes(value);
-    Buffer.BlockCopy(asBytes, 0, dest, offset, asBytes.Length);
+    unsafe
+    {
+        fixed (byte* dest_ptr = &dest[offset])
+        {
+            *(sbyte*) dest_ptr = value;
+        }
+    }
 }
 void writeScalarArray(byte[] dest, int offset, byte value)
 {
-    var asBytes = BitConverter.GetBytes(value);
-    Buffer.BlockCopy(asBytes, 0, dest, offset, asBytes.Length);
+    unsafe
+    {
+        fixed (byte* dest_ptr = &dest[offset])
+        {
+            *(byte*) dest_ptr = value;
+        }
+    }
 }
 void writeScalarArray(byte[] dest, int offset, short value)
 {
-    var asBytes = BitConverter.GetBytes(value);
-    Buffer.BlockCopy(asBytes, 0, dest, offset, asBytes.Length);
+    unsafe
+    {
+        fixed (byte* dest_ptr = &dest[offset])
+        {
+            *(short*) dest_ptr = value;
+        }
+    }
 }
 void writeScalarArray(byte[] dest, int offset, ushort value)
 {
-    var asBytes = BitConverter.GetBytes(value);
-    Buffer.BlockCopy(asBytes, 0, dest, offset, asBytes.Length);
+    unsafe
+    {
+        fixed (byte* dest_ptr = &dest[offset])
+        {
+            *(ushort*) dest_ptr = value;
+        }
+    }
 }
 void writeScalarArray(byte[] dest, int offset, int value)
 {
-    var asBytes = BitConverter.GetBytes(value);
-    Buffer.BlockCopy(asBytes, 0, dest, offset, asBytes.Length);
+    unsafe
+    {
+        fixed (byte* dest_ptr = &dest[offset])
+        {
+            *(int*) dest_ptr = value;
+        }
+    }
 }
 void writeScalarArray(byte[] dest, int offset, uint value)
 {
-    var asBytes = BitConverter.GetBytes(value);
-    Buffer.BlockCopy(asBytes, 0, dest, offset, asBytes.Length);
+    unsafe
+    {
+        fixed (byte* dest_ptr = &dest[offset])
+        {
+            *(uint*) dest_ptr = value;
+        }
+    }
 }
 void writeScalarArray(byte[] dest, int offset, long value)
 {
-    var asBytes = BitConverter.GetBytes(value);
-    Buffer.BlockCopy(asBytes, 0, dest, offset, asBytes.Length);
+    unsafe
+    {
+        fixed (byte* dest_ptr = &dest[offset])
+        {
+            *(long*) dest_ptr = value;
+        }
+    }
 }
 void writeScalarArray(byte[] dest, int offset, ulong value)
 {
-    var asBytes = BitConverter.GetBytes(value);
-    Buffer.BlockCopy(asBytes, 0, dest, offset, asBytes.Length);
+    unsafe
+    {
+        fixed (byte* dest_ptr = &dest[offset])
+        {
+            *(ulong*) dest_ptr = value;
+        }
+    }
 }
 void writeScalarArray(byte[] dest, int offset, float value)
 {
-    var asBytes = BitConverter.GetBytes(value);
-    Buffer.BlockCopy(asBytes, 0, dest, offset, asBytes.Length);
+    unsafe
+    {
+        fixed (byte* dest_ptr = &dest[offset])
+        {
+            *(float*) dest_ptr = value;
+        }
+    }
 }
 void writeScalarArray(byte[] dest, int offset, double value)
 {
-    var asBytes = BitConverter.GetBytes(value);
-    Buffer.BlockCopy(asBytes, 0, dest, offset, asBytes.Length);
+    unsafe
+    {
+        fixed (byte* dest_ptr = &dest[offset])
+        {
+            *(double*) dest_ptr = value;
+        }
+    }
 }
 void writeScalarArray(byte[] dest, int offset, bool value)
 {
-    var asBytes = BitConverter.GetBytes(value);
-    Buffer.BlockCopy(asBytes, 0, dest, offset, asBytes.Length);
+    unsafe
+    {
+        fixed (byte* dest_ptr = &dest[offset])
+        {
+            *(bool*) dest_ptr = value;
+        }
+    }
 }
