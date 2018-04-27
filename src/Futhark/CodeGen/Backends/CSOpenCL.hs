@@ -51,9 +51,7 @@ compileProg module_name prog = do
                      , CS.opsEntryInput = unpackArrayInput
                      , CS.opsEntryOutput = packArrayOutput
                      }
-        imports = [ Using Nothing "Cloo"
-                  , Using Nothing "Cloo.Bindings"
-                  , Using Nothing "System.Runtime.CompilerServices"
+        imports = [ Using Nothing "System.Runtime.CompilerServices"
                   , Using Nothing "System.Runtime.InteropServices" ]
         defines = [ Escape csOpenCL
                   , Escape csPanic]
