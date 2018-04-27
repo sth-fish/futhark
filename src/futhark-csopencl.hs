@@ -29,4 +29,4 @@ main = compilerMain () []
               return ()
             ToExecutable -> liftIO $ do
               perms <- liftIO $ getPermissions outpath'
-              setPermissions outpath' $ setOwnerExecutable True perms
+              setPermissions outpath' $ setOwnerExecutable False perms
