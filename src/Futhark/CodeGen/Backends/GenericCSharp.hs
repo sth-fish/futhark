@@ -385,7 +385,8 @@ compileProg module_name constructor imports defines ops userstate boilerplate pr
             Just name -> do
               entry_points <- mapM compileEntryFun $ filter (Imp.functionEntry . snd) funs
               let constructor' = constructorToConstructorDef constructor name at_inits'
-              return [ClassDef $ Class name $ constructor' : defines' ++ opencl_boilerplate ++
+              return [ClassDef $ Class name $ member_decls' ++
+                      constructor' : defines' ++ opencl_boilerplate ++
                       map FunDef (definitions ++ entry_points)]
 
 
@@ -410,6 +411,7 @@ compileProg module_name constructor imports defines ops userstate boilerplate pr
                        [StaticFunDef $ Def "Main" VoidT [(string_arrayT,"args")] main_entry]])
 
 
+  
         string_arrayT = Composite $ ArrayT $ Primitive StringT
         main_entry :: [CSStmt]
         main_entry = [ Assign (Var "internal_instance") (simpleInitClass "FutharkInternal" [Var "args"])
@@ -629,7 +631,6 @@ entryPointInput (i, Imp.TransparentValue (Imp.ArrayValue mem memsize Imp.Default
   stm $ Assign dest unwrap_call
 
 entryPointInput (_, Imp.TransparentValue (Imp.ArrayValue mem memsize (Imp.Space sid) bt ept dims), e) = do
-  stm $ Comment "supper" []
   unpack_input <- asks envEntryInput
   unpack <- collect $ unpack_input mem memsize sid bt ept dims e
   stms unpack
@@ -843,16 +844,17 @@ copyMemoryDefaultSpace :: VName -> CSExp -> VName -> CSExp -> CSExp ->
                           CompilerM op s ()
 copyMemoryDefaultSpace destmem destidx srcmem srcidx nbytes =
   stm $ Exp $ simpleCall "Buffer.BlockCopy" [ Var (compileName srcmem), srcidx
-                                      , Var (compileName destmem), destidx,
-                                        nbytes]
+                                            , Var (compileName destmem), destidx,
+                                              nbytes]
 
 compileEntryFun :: (Name, Imp.Function op)
                 -> CompilerM op s CSFunDef
-compileEntryFun entry = do
+compileEntryFun entry@(_,Imp.Function _ outputs _ _ _ _) = do
   (fname', params, outputType, prepareIn, body_lib, _, prepareOut, res, _) <- prepareEntry entry
   let ret = Return $ tupleOrSingle $ map snd res
+  let outputDecls = map getDefaultDecl outputs
   return $ Def fname' outputType params $
-    prepareIn ++ body_lib ++ prepareOut ++ [ret]
+    prepareIn ++ outputDecls ++ body_lib ++ prepareOut ++ [ret]
 
 
 callEntryFun :: [CSStmt] -> (Name, Imp.Function op)
