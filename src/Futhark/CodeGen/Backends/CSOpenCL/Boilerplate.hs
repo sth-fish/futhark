@@ -32,10 +32,10 @@ generateBoilerplate opencl_code opencl_prelude kernel_names types sizes = do
   CS.stm top_decls
 
   CS.stm $ AssignTyped stringArrayT (Var "size_names")
-    (Just $ Collection "[]" (map (String . pretty) $ M.keys sizes))
+    (Just $ Collection "string[]" (map (String . pretty) $ M.keys sizes))
 
   CS.stm $ AssignTyped stringArrayT (Var "size_classes")
-    (Just $ Collection "[]" (map (String . pretty) $ M.elems sizes))
+    (Just $ Collection "string[]" (map (String . pretty) $ M.elems sizes))
 
 
   let get_num_sizes = CS.publicName "get_num_sizes"
