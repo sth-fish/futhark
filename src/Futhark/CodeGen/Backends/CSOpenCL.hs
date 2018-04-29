@@ -385,7 +385,7 @@ staticOpenCLArray name "device" t vs = do
   CS.stm $ Reassign (Var name') (Var name')
   where name' = CS.compileName name
 staticOpenCLArray _ space _ _ =
-  fail $ "CS.penCL backend cannot create static array in memory space '" ++ space ++ "'"
+  fail $ "CSOpenCL backend cannot create static array in memory space '" ++ space ++ "'"
 
 packArrayOutput :: CS.EntryOutput Imp.OpenCL ()
 packArrayOutput mem "device" bt ept dims = do
@@ -420,7 +420,6 @@ unpackArrayInput mem memsize "device" t _ dims e = do
         ,CS.toIntPtr (Integer 0), memsize',CS.toIntPtr (Var ptr)
         ,CS.toIntPtr (Integer 0), Null, Null]
       ]]
-  CS.stm $ Comment "suppe" []
 
   where mem_dest = Var $ CS.compileName mem
         dims' = map CS.compileDim dims
