@@ -747,8 +747,11 @@ printStm (Imp.ScalarValue bt ept _) e =
 printStm (Imp.ArrayValue _ _ _ bt ept []) e =
   return $ printPrimStm e bt ept
 printStm (Imp.ArrayValue mem memsize space bt ept (outer:shape)) e = do
+
   v <- newVName "print_elem"
   first <- newVName "print_first"
+  let createArray = "createArray_" ++ compilePrimTypeExt bt ept
+  let createdArray = simpleCall createArray [Var $ compileName mem, CreateArray (Primitive $ CSInt Int64T) $ map compileDim (outer:shape)]
   let size = callMethod (CreateArray (Primitive $ CSInt Int32T) $ map compileDim $ outer:shape)
                  "Aggregate" [ Integer 1
                              , Lambda (Tuple [Var "acc", Var "val"])
@@ -760,7 +763,7 @@ printStm (Imp.ArrayValue mem memsize space bt ept (outer:shape)) e = do
     [puts emptystr]
     [Assign (Var $ pretty first) $ Var "true",
      puts "[",
-     ForEach (pretty v) e [
+     ForEach (pretty v) createdArray [
         If (simpleCall "!" [Var $ pretty first])
         [puts ", "] [],
         printelem,
