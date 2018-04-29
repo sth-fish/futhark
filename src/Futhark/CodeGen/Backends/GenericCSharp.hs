@@ -387,7 +387,7 @@ compileProg module_name constructor imports defines ops userstate boilerplate pr
               let constructor' = constructorToConstructorDef constructor name at_inits'
               return [ClassDef $ Class name $ member_decls' ++
                       constructor' : defines' ++ opencl_boilerplate ++
-                      map FunDef (definitions ++ entry_points)]
+                      map PublicFunDef (definitions ++ entry_points)]
 
 
             Nothing -> do
