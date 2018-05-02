@@ -412,7 +412,6 @@ unpackArrayInput mem memsize "device" t _ dims e = do
 
   let memsize' = CS.compileDim memsize
   allocateOpenCLBuffer mem memsize' "device"
-  CS.stm $ comment "packarrinput"
   CS.stm $ Unsafe [Fixed (CS.assignArrayPointer (Field e "array") (Var ptr))
       [ ifNotZeroSize memsize' $
         Exp $ CS.simpleCall "CL10.EnqueueWriteBuffer"

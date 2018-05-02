@@ -1,4 +1,4 @@
-public class FlatArray<T>
+public struct FlatArray<T>
 {
     public long[] shape;
     public T[] array;
@@ -46,6 +46,11 @@ public class FlatArray<T>
         {
             yield return val;
         }
+    }
+
+    public (T[], long[]) AsTuple()
+    {
+        return (this.array, this.shape);
     }
 }
 

@@ -47,6 +47,7 @@ module Futhark.CodeGen.Backends.GenericCSharp
   , collect'
   , collect
   , simpleCall
+  , callMethod
   , simpleInitClass
   , parametrizedCall
 
@@ -607,21 +608,10 @@ entryPointInput (_, Imp.TransparentValue (Imp.ScalarValue bt _ name), e) = do
       cscall = simpleCall csconverter [e]
   stm $ Assign vname' cscall
 
-entryPointInput (i, Imp.TransparentValue (Imp.ArrayValue mem memsize Imp.DefaultSpace t s dims), e) = do
-  let type_is_wrong =
-        UnOp "!" $
-        BinOp "&&"
-        (BinOp "is" e $ Var "FlatArray`1")
-        (BinOp "==" (Field e "GetType().GetGenericArguments()[0]") (Var (compileSystemTypeExt t s)))
-  stm $ If type_is_wrong
-    [badInput i (getCSExpType e) $ concat (replicate (length dims) "[]") ++
-     prettySigned (s==Imp.TypeUnsigned) t]
-    []
-
+entryPointInput (_, Imp.TransparentValue (Imp.ArrayValue mem memsize Imp.DefaultSpace _ _ dims), e) = do
   zipWithM_ (unpackDim e) dims [0..]
   let dest = Var $ compileName mem
       unwrap_call = simpleCall "unwrapArray" [e]
-
   case memsize of
     Imp.VarSize sizevar ->
       stm $ Assign (Var $ compileName sizevar) $ Field e "Length"
@@ -747,11 +737,8 @@ printStm (Imp.ScalarValue bt ept _) e =
 printStm (Imp.ArrayValue _ _ _ bt ept []) e =
   return $ printPrimStm e bt ept
 printStm (Imp.ArrayValue mem memsize space bt ept (outer:shape)) e = do
-
   v <- newVName "print_elem"
   first <- newVName "print_first"
-  let createArray = "createArray_" ++ compilePrimTypeExt bt ept
-  let createdArray = simpleCall createArray [Var $ compileName mem, CreateArray (Primitive $ CSInt Int64T) $ map compileDim (outer:shape)]
   let size = callMethod (CreateArray (Primitive $ CSInt Int32T) $ map compileDim $ outer:shape)
                  "Aggregate" [ Integer 1
                              , Lambda (Tuple [Var "acc", Var "val"])
@@ -763,7 +750,7 @@ printStm (Imp.ArrayValue mem memsize space bt ept (outer:shape)) e = do
     [puts emptystr]
     [Assign (Var $ pretty first) $ Var "true",
      puts "[",
-     ForEach (pretty v) createdArray [
+     ForEach (pretty v) e [
         If (simpleCall "!" [Var $ pretty first])
         [puts ", "] [],
         printelem,
@@ -852,12 +839,28 @@ copyMemoryDefaultSpace destmem destidx srcmem srcidx nbytes =
 
 compileEntryFun :: (Name, Imp.Function op)
                 -> CompilerM op s CSFunDef
-compileEntryFun entry@(_,Imp.Function _ outputs _ _ _ _) = do
-  (fname', params, outputType, prepareIn, body_lib, _, prepareOut, res, _) <- prepareEntry entry
+compileEntryFun entry@(_,Imp.Function _ outputs _ _ results args) = do
+  let params = map (getType &&& extValueDescName) args
+  let outputType = tupleOrSingleT $ map getType results
+
+
+  (fname', _, _, prepareIn, body_lib, _, prepareOut, res, _) <- prepareEntry entry
   let ret = Return $ tupleOrSingle $ map snd res
   let outputDecls = map getDefaultDecl outputs
   return $ Def fname' outputType params $
     prepareIn ++ outputDecls ++ body_lib ++ prepareOut ++ [ret]
+
+  where getType :: Imp.ExternalValue -> CSType
+        getType (Imp.OpaqueValue _ _) = undefined
+        getType (Imp.TransparentValue (Imp.ScalarValue primtype signedness _)) =
+          compilePrimTypeToASText primtype signedness
+        getType (Imp.TransparentValue (Imp.ArrayValue _ _ _ primtype signedness _)) =
+          let t = compilePrimTypeToASText primtype signedness
+          in Composite $ TupleT [Composite $ ArrayT t, Composite $ ArrayT $ Primitive $ CSInt Int64T]
+
+
+
+        
 
 
 callEntryFun :: [CSStmt] -> (Name, Imp.Function op)
