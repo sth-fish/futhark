@@ -555,16 +555,16 @@ compileDim (Imp.VarSize v) = Var $ compileName v
 
 unpackDim :: CSExp -> Imp.DimSize -> Int32 -> CompilerM op s ()
 unpackDim arr_name (Imp.ConstSize c) i = do
-  let shape_name = Field arr_name "shape"
+  let shape_name = Field arr_name "Item2" -- array tuples are currently (data array * dimension array) currently 
   let constant_c = Integer $ toInteger c
   let constant_i = Integer $ toInteger i
   stm $ Assert (BinOp "==" constant_c (Index shape_name $ IdxExp constant_i)) "constant dimension wrong"
 
 unpackDim arr_name (Imp.VarSize var) i = do
-  let shape_name = Field arr_name "shape"
+  let shape_name = Field arr_name "Item2"
   let src = Index shape_name $ IdxExp $ Integer $ toInteger i
   let dest = Var $ compileName var
-  stm $ Assign dest src
+  stm $ Assign dest $ simpleCall "Convert.ToInt32" [src]
 
 entryPointOutput :: Imp.ExternalValue -> CompilerM op s CSExp
 entryPointOutput (Imp.OpaqueValue desc vs) =
@@ -577,8 +577,8 @@ entryPointOutput (Imp.TransparentValue (Imp.ScalarValue bt ept name)) =
 
 entryPointOutput (Imp.TransparentValue (Imp.ArrayValue mem _ Imp.DefaultSpace bt ept dims)) = do
   let src = Var $ compileName mem
-  let createArray = "createArray_" ++ compilePrimTypeExt bt ept
-  return $ simpleCall createArray [src, CreateArray (Primitive $ CSInt Int64T) $ map compileDim dims]
+  let createTuple = "createTuple_" ++ compilePrimTypeExt bt ept
+  return $ simpleCall createTuple [src, CreateArray (Primitive $ CSInt Int64T) $ map compileDim dims]
 
 entryPointOutput (Imp.TransparentValue (Imp.ArrayValue mem _ (Imp.Space sid) bt ept dims)) = do
   pack_output <- asks envEntryOutput
@@ -600,7 +600,7 @@ entryPointInput (i, Imp.OpaqueValue desc vs, e) = do
                                (BinOp "==" (Field e "desc") (String desc))
   stm $ If (UnOp "!" type_is_ok) [badInput i (getCSExpType e) desc] []
   mapM_ entryPointInput $ zip3 (repeat i) (map Imp.TransparentValue vs) $
-    map (Index (Field e "data") . IdxExp . Integer) [0..]
+    map (Index (Field e "Item1") . IdxExp . Integer) [0..]
 
 entryPointInput (_, Imp.TransparentValue (Imp.ScalarValue bt _ name), e) = do
   let vname' = Var $ compileName name
@@ -608,13 +608,14 @@ entryPointInput (_, Imp.TransparentValue (Imp.ScalarValue bt _ name), e) = do
       cscall = simpleCall csconverter [e]
   stm $ Assign vname' cscall
 
-entryPointInput (_, Imp.TransparentValue (Imp.ArrayValue mem memsize Imp.DefaultSpace _ _ dims), e) = do
+entryPointInput (_, Imp.TransparentValue (Imp.ArrayValue mem memsize Imp.DefaultSpace bt _ dims), e) = do
   zipWithM_ (unpackDim e) dims [0..]
+  let arrayData = Field e "Item1"
   let dest = Var $ compileName mem
-      unwrap_call = simpleCall "unwrapArray" [e]
+      unwrap_call = simpleCall "unwrapArray" [arrayData, sizeOf $ compilePrimTypeToAST bt]
   case memsize of
     Imp.VarSize sizevar ->
-      stm $ Assign (Var $ compileName sizevar) $ Field e "Length"
+      stm $ Assign (Var $ compileName sizevar) $ Field e "Item2.Length"
     Imp.ConstSize _ ->
       return ()
 
@@ -675,37 +676,43 @@ readFun Cert _          = error "readFun: cert"
 
 -- The value returned will be used when reading binary arrays, to indicate what
 -- the expected type is
+-- Key into the FUTHARK_PRIMTYPES dict.
 readTypeEnum :: PrimType -> Imp.Signedness -> String
-readTypeEnum (IntType Int8)  Imp.TypeUnsigned = "FUTHARK_UINT8"
-readTypeEnum (IntType Int16) Imp.TypeUnsigned = "FUTHARK_UINT16"
-readTypeEnum (IntType Int32) Imp.TypeUnsigned = "FUTHARK_UINT32"
-readTypeEnum (IntType Int64) Imp.TypeUnsigned = "FUTHARK_UINT64"
-readTypeEnum (IntType Int8)  Imp.TypeDirect   = "FUTHARK_INT8"
-readTypeEnum (IntType Int16) Imp.TypeDirect   = "FUTHARK_INT16"
-readTypeEnum (IntType Int32) Imp.TypeDirect   = "FUTHARK_INT32"
-readTypeEnum (IntType Int64) Imp.TypeDirect   = "FUTHARK_INT64"
-readTypeEnum (FloatType Float32) _ = "FUTHARK_FLOAT32"
-readTypeEnum (FloatType Float64) _ = "FUTHARK_FLOAT64"
-readTypeEnum Imp.Bool _ = "FUTHARK_BOOL"
+readTypeEnum (IntType Int8)  Imp.TypeUnsigned = "u8"
+readTypeEnum (IntType Int16) Imp.TypeUnsigned = "u16"
+readTypeEnum (IntType Int32) Imp.TypeUnsigned = "u32"
+readTypeEnum (IntType Int64) Imp.TypeUnsigned = "u64"
+readTypeEnum (IntType Int8)  Imp.TypeDirect   = "i8"
+readTypeEnum (IntType Int16) Imp.TypeDirect   = "i16"
+readTypeEnum (IntType Int32) Imp.TypeDirect   = "i32"
+readTypeEnum (IntType Int64) Imp.TypeDirect   = "i64"
+readTypeEnum (FloatType Float32) _ = "f32"
+readTypeEnum (FloatType Float64) _ = "f64"
+readTypeEnum Imp.Bool _ = "bool"
 readTypeEnum Cert _ = error "readTypeEnum: cert"
 
-readInput :: Imp.ExternalValue -> CSExp -> CSStmt
-readInput (Imp.OpaqueValue desc _) _ =
+readInput :: Imp.ExternalValue -> CSStmt
+readInput (Imp.OpaqueValue desc _) =
   Throw $ simpleInitClass "Exception" [String $ "Cannot read argument of type " ++ desc ++ "."]
 
-readInput decl@(Imp.TransparentValue (Imp.ScalarValue bt ept _)) stdin =
+readInput decl@(Imp.TransparentValue (Imp.ScalarValue bt ept _)) =
   let reader' = readFun bt ept
-  in Assign (Var $ extValueDescName decl) $ simpleCall reader' [stdin]
+  in Assign (Var $ extValueDescName decl) $ simpleCall reader' []
 
 -- TODO: If the type identifier of 'Float32' is changed, currently the error
 -- messages for reading binary input will not use this new name. This is also a
 -- problem for the C runtime system.
-readInput decl@(Imp.TransparentValue (Imp.ArrayValue _ _ _ bt ept dims)) stdin =
+readInput decl@(Imp.TransparentValue (Imp.ArrayValue _ _ _ bt ept dims)) =
   let rank' = Var $ show $ length dims
       type_enum = Var $ readTypeEnum bt ept
-      ct = Var $ compileTypeConverterExt bt ept
-  in Assign (Var $ extValueDescName decl) $ simpleCall "read_array"
-     [stdin, type_enum, rank', ct]
+      bt' =  compilePrimTypeExt bt ept
+      read_func =  readFun bt ept
+      readStrArray = initializeGenericFunction "ReadStrArray" bt'
+  in Assign (Var $ extValueDescName decl) $ simpleCall readStrArray [rank', type_enum, Var read_func]
+
+initializeGenericFunction :: String -> String -> String
+initializeGenericFunction fun tp = fun ++ "<" ++ tp ++ ">"
+
 
 printPrimStm :: CSExp -> PrimType -> Imp.Signedness -> CSStmt
 printPrimStm val t ept =
@@ -868,9 +875,8 @@ callEntryFun :: [CSStmt] -> (Name, Imp.Function op)
 callEntryFun pre_timing entry@(fname, Imp.Function _ outputs _ _ _ decl_args) = do
   (_, _, outputType, prepareIn, _, body_bin, _, res, prepare_run) <- prepareEntry entry
 
-  let stdin = Var "stdin_stream"
-  let get_reader = [Assign stdin $ simpleCall "getStream" []]
-  let str_input = map (`readInput` stdin) decl_args
+  stm $ Exp $ simpleCall "ValueReader" []
+  let str_input = map (readInput) decl_args
   let outputDecls = map getDefaultDecl outputs
       exitcall = [
           Exp $ simpleCall "Console.WriteLine" [formatString "Assertion.{} failed" [Var "e"]]
@@ -894,7 +900,7 @@ callEntryFun pre_timing entry@(fname, Imp.Function _ outputs _ _ _ decl_args) = 
   let fname' = "entry_" ++ nameToString fname
 
   return (Def fname' VoidT [] $
-           get_reader ++ str_input ++ prepareIn ++ outputDecls ++
+           str_input ++ prepareIn ++ outputDecls ++
            [Try [do_warmup_run, do_num_runs] [except']] ++
            [close_runtime_file] ++
            str_output,

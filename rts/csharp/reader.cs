@@ -1,12 +1,30 @@
-    internal Stack<char> LookaheadBuffer = new Stack<char>();
-    void ResetLookahead(){LookaheadBuffer.Clear();}
+    private Stream s;
 
-    char? GetChar(Stream f)
+    // Note that the lookahead buffer does not interact well with
+    // binary reading.  We are careful to not let this become a
+    // problem.
+    private Stack<char> LookaheadBuffer = new Stack<char>();
+
+    void ResetLookahead(){
+        LookaheadBuffer.Clear();
+    }
+
+    public void ValueReader(Stream s)
+    {
+        this.s = s;
+    }
+
+    public void ValueReader()
+    {
+        this.s = Console.OpenStandardInput();
+    }
+
+    private char? GetChar()
     {
         char c;
         if (LookaheadBuffer.Count == 0)
         {
-            c = (char) f.ReadByte();
+            c = (char) this.s.ReadByte();
         }
         else
         {
@@ -16,9 +34,9 @@
         return c;
     }
 
-    char[] GetChars(Stream f, int n)
+    char[] GetChars(int n)
     {
-        return Enumerable.Range(0, n).Select(_ => GetChar(f).Value).ToArray();
+        return Enumerable.Range(0, n).Select(_ => GetChar().Value).ToArray();
     }
 
     void UngetChar(char c)
@@ -26,28 +44,28 @@
         LookaheadBuffer.Push(c);
     }
 
-    char PeekChar(Stream f)
+    char PeekChar()
     {
-        var c = GetChar(f);
+        var c = GetChar();
         UngetChar(c.Value);
         return c.Value;
     }
 
-    void SkipSpaces(Stream f)
+    void SkipSpaces()
     {
-        var c = GetChar(f);
+        var c = GetChar();
         while (c.HasValue){
             if (char.IsWhiteSpace(c.Value))
             {
-                c = GetChar(f);
+                c = GetChar();
             }
             else if (c == '-')
             {
-                if (PeekChar(f) == '-')
+                if (PeekChar() == '-')
                 {
                     while (c.Value != '\n')
                     {
-                        c = GetChar(f);
+                        c = GetChar();
                     }
                 }
                 else
@@ -60,16 +78,16 @@
                 break;
             }
         }
-    
+
         if (c.HasValue)
         {
             UngetChar(c.Value);
         }
     }
 
-    bool ParseSpecificChar(Stream f, char c)
+    bool ParseSpecificChar(char c)
     {
-        var got = GetChar(f);
+        var got = GetChar();
         if (got.Value != c)
         {
             UngetChar(got.Value);
@@ -78,23 +96,22 @@
         return true;
     }
 
-    bool ParseSpecificString(Stream f, string str)
+    bool ParseSpecificString(string str)
     {
         foreach (var c in str.ToCharArray())
         {
-            ParseSpecificChar(f, c);
+            ParseSpecificChar(c);
         }
 
         return true;
     }
 
-
-    string Optional(Func<Stream, string> p, Stream f)
+    string Optional(Func<string> p)
     {
         string res = null;
         try
         {
-            res = p(f);
+            res = p();
         }
         catch (Exception)
         {
@@ -102,12 +119,12 @@
 
         return res;
     }
-    
-    bool Optional(Func<Stream, char, bool> p, Stream f, char c)
+
+    bool Optional(Func<char, bool> p, char c)
     {
         try
         {
-            return p(f,c);
+            return p(c);
         }
         catch (Exception)
         {
@@ -116,47 +133,47 @@
         return false;
     }
 
-    bool OptionalSpecificString(Stream f, string s)
+    bool OptionalSpecificString(string s)
     {
-        var c = PeekChar(f);
+        var c = PeekChar();
         if (c == s[0])
         {
-            return ParseSpecificString(f, s);
+            return ParseSpecificString(s);
         }
         return false;
     }
-        
-        
-        List<string> sepBy(Func<Stream, string> p, Func<Stream, string> sep, Stream arg)
-        {
-            var elems = new List<string>();
-            var x = Optional(p, arg);
-            if (!string.IsNullOrWhiteSpace(x))
-            {
-                elems.Add(x);
-                while (!string.IsNullOrWhiteSpace(Optional(sep, arg)))
-                {
-                    var y = Optional(p, arg);
-                    elems.Add(y);
-                } 
-            }
-            return elems;
-        }
 
-    string ParseHexInt(Stream f)
+
+    List<string> sepBy(Func<string> p, Func<string> sep)
+    {
+        var elems = new List<string>();
+        var x = Optional(p);
+        if (!string.IsNullOrWhiteSpace(x))
+        {
+            elems.Add(x);
+            while (!string.IsNullOrWhiteSpace(Optional(sep)))
+            {
+                var y = Optional(p);
+                elems.Add(y);
+            }
+        }
+        return elems;
+    }
+
+    string ParseHexInt()
     {
         var s = "";
-        var c = GetChar(f);
+        var c = GetChar();
         while (c.HasValue)
         {
             if (Uri.IsHexDigit(c.Value))
             {
                 s += c.Value;
-                c = GetChar(f);
+                c = GetChar();
             }
             else if (c == '_')
             {
-                c = GetChar(f);
+                c = GetChar();
             }
             else
             {
@@ -168,14 +185,14 @@
         return Convert.ToString(Convert.ToUInt32(s, 16));
     }
 
-    string ParseInt(Stream f)
+    string ParseInt()
     {
         var s = "";
-        var c = GetChar(f);
-        if (c.Value == '0' && "xX".Contains(PeekChar(f)))
+        var c = GetChar();
+        if (c.Value == '0' && "xX".Contains(PeekChar()))
         {
-            GetChar(f);
-            s += ParseHexInt(f);
+            GetChar();
+            s += ParseHexInt();
         }
         else
         {
@@ -183,11 +200,11 @@
             {
                 if (char.IsDigit(c.Value))
                 {
-                    s += c.Value;                    
-                    c = GetChar(f);
+                    s += c.Value;
+                    c = GetChar();
                 }else if (c == '_')
                 {
-                    c = GetChar(f);
+                    c = GetChar();
                 }
                 else
                 {
@@ -195,7 +212,7 @@
                     break;
                 }
             }
-            
+
         }
 
         if (s.Length == 0)
@@ -206,13 +223,12 @@
         return s;
     }
 
-    string ParseIntSigned(Stream f)
+    string ParseIntSigned()
     {
-        var s = "";
-        var c = GetChar(f);
-        if (c.Value == '-' && char.IsDigit(PeekChar(f)))
+        var c = GetChar();
+        if (c.Value == '-' && char.IsDigit(PeekChar()))
         {
-            return c + ParseInt(f);
+            return c + ParseInt();
         }
         else
         {
@@ -221,58 +237,58 @@
                 UngetChar(c.Value);
             }
 
-            return ParseInt(f);
+            return ParseInt();
         }
     }
 
-    string ReadStrComma(Stream f)
+    string ReadStrComma()
     {
-        SkipSpaces(f);
-        ParseSpecificChar(f, ',');
+        SkipSpaces();
+        ParseSpecificChar(',');
         return ",";
     }
 
-    int ReadStrInt(Stream f, string s)
+    int ReadStrInt(string s)
     {
-        SkipSpaces(f);
-        var x = Convert.ToInt32(ParseIntSigned(f));
-        OptionalSpecificString(f, s);
-        return x;
-    }
-    
-    int ReadStrUint(Stream f, string s)
-    {
-        SkipSpaces(f);
-        var x = Convert.ToInt32(ParseInt(f));
-        OptionalSpecificString(f, s);
+        SkipSpaces();
+        var x = Convert.ToInt32(ParseIntSigned());
+        OptionalSpecificString(s);
         return x;
     }
 
-    int ReadStrI8(Stream f){return ReadStrInt(f, "i8");}
-    int ReadStrI16(Stream f){return ReadStrInt(f, "i16");}
-    int ReadStrI32(Stream f){return ReadStrInt(f, "i32");}
-    int ReadStrI64(Stream f){return ReadStrInt(f, "i64");}
-    int ReadStrU8(Stream f){return ReadStrInt(f, "u8");}
-    int ReadStrU16(Stream f){return ReadStrInt(f, "u16");}
-    int ReadStrU32(Stream f){return ReadStrInt(f, "u32");}
-    int ReadStrU64(Stream f){return ReadStrInt(f, "u64");}
-
-    char ReadChar(Stream f)
+    int ReadStrUint(string s)
     {
-        SkipSpaces(f);
-        ParseSpecificChar(f, '\'');
-        var c = GetChar(f);
-        ParseSpecificChar(f, '\'');
+        SkipSpaces();
+        var x = Convert.ToInt32(ParseInt());
+        OptionalSpecificString(s);
+        return x;
+    }
+
+    int ReadStrI8(){return ReadStrInt("i8");}
+    int ReadStrI16(){return ReadStrInt("i16");}
+    int ReadStrI32(){return ReadStrInt("i32");}
+    int ReadStrI64(){return ReadStrInt("i64");}
+    int ReadStrU8(){return ReadStrInt("u8");}
+    int ReadStrU16(){return ReadStrInt("u16");}
+    int ReadStrU32(){return ReadStrInt("u32");}
+    int ReadStrU64(){return ReadStrInt("u64");}
+
+    char ReadChar()
+    {
+        SkipSpaces();
+        ParseSpecificChar('\'');
+        var c = GetChar();
+        ParseSpecificChar('\'');
         return c.Value;
     }
 
-    float ReadStrHexFloat(Stream f, char sign)
+    float ReadStrHexFloat(char sign)
     {
-        var int_part = ParseHexInt(f);
-        ParseSpecificChar(f, '.');
-        var frac_part = ParseHexInt(f);
-        ParseSpecificChar(f, 'p');
-        var exponent = ParseHexInt(f);
+        var int_part = ParseHexInt();
+        ParseSpecificChar('.');
+        var frac_part = ParseHexInt();
+        ParseSpecificChar('p');
+        var exponent = ParseHexInt();
 
         var int_val = Convert.ToInt32(int_part, 16);
         var frac_val = Convert.ToSingle(Convert.ToInt32(frac_part, 16)) / Math.Pow(16, frac_part.Length);
@@ -287,10 +303,10 @@
         return Convert.ToSingle(total_val);
     }
 
-    float ReadStrDecimal(Stream f)
+    float ReadStrDecimal()
     {
-        SkipSpaces(f);
-        var c = GetChar(f);
+        SkipSpaces();
+        var c = GetChar();
         char sign;
         if (c.Value == '-')
         {
@@ -301,29 +317,29 @@
             UngetChar(c.Value);
             sign = '+';
         }
-        
+
         // Check for hexadecimal float
-        c = GetChar(f);
-        if (c.Value == '0' && "xX".Contains(PeekChar(f)))
+        c = GetChar();
+        if (c.Value == '0' && "xX".Contains(PeekChar()))
         {
-            GetChar(f);
-            return ReadStrHexFloat(f, sign);
+            GetChar();
+            return ReadStrHexFloat(sign);
         }
         else
         {
             UngetChar(c.Value);
         }
 
-        var bef = Optional(ParseInt, f);
+        var bef = Optional(this.ParseInt);
         var aft = "";
         if (string.IsNullOrEmpty(bef))
         {
             bef = "0";
-            ParseSpecificChar(f, '.');
-            aft = ParseInt(f);
-        }else if (Optional(ParseSpecificChar, f, '.'))
+            ParseSpecificChar('.');
+            aft = ParseInt();
+        }else if (Optional(ParseSpecificChar, '.'))
         {
-            aft = ParseInt(f);
+            aft = ParseInt();
         }
         else
         {
@@ -331,10 +347,10 @@
         }
 
         var expt = "";
-        if (Optional(ParseSpecificChar, f, 'E') ||
-            Optional(ParseSpecificChar, f, 'e'))
+        if (Optional(ParseSpecificChar, 'E') ||
+            Optional(ParseSpecificChar, 'e'))
         {
-            expt = ParseIntSigned(f);
+            expt = ParseIntSigned();
         }
         else
         {
@@ -344,88 +360,201 @@
         return Convert.ToSingle(sign + bef + "." + aft + "E" + expt);
     }
 
-    float ReadStrF32(Stream f)
+    float ReadStrF32()
     {
-        var x = ReadStrDecimal(f);
-        OptionalSpecificString(f, "f32");
-        return x;
-    }
-    
-    float ReadStrF64(Stream f)
-    {
-        var x = ReadStrDecimal(f);
-        OptionalSpecificString(f, "f64");
+        var x = ReadStrDecimal();
+        OptionalSpecificString("f32");
         return x;
     }
 
-    bool ReadStrBool(Stream f)
+    float ReadStrF64()
     {
-        SkipSpaces(f);
-        if (PeekChar(f) == 't')
+        var x = ReadStrDecimal();
+        OptionalSpecificString("f64");
+        return x;
+    }
+
+    bool ReadStrBool()
+    {
+        SkipSpaces();
+        if (PeekChar() == 't')
         {
-            ParseSpecificString(f, "true");
+            ParseSpecificString("true");
             return true;
         }
 
-        if (PeekChar(f) == 'f')
+        if (PeekChar() == 'f')
         {
-            ParseSpecificString(f, "false");
+            ParseSpecificString("false");
             return false;
         }
 
         throw new Exception("ValueError");
     }
 
-    sbyte read_i8(Stream f)
+    private (T[], int[]) ReadStrArrayElems<T>(int rank, Func<T> ReadStrScalar)
     {
-        return (sbyte) ReadStrI8(f);
-    }
-    short read_i16(Stream f)
-    {
-        return (short) ReadStrI16(f);
-    }
-    int read_i32(Stream f)
-    {
-        return ReadStrI32(f);
-    }
-    long read_i64(Stream f)
-    {
-        return ReadStrI64(f);
-    }
-    
-    byte read_u8(Stream f)
-    {
-        return (byte) ReadStrU8(f);
-    }
-    ushort read_u16(Stream f)
-    {
-        return (ushort) ReadStrU16(f);
-    }
-    uint read_u32(Stream f)
-    {
-        return (uint) ReadStrU32(f);
-    }
-    ulong read_u64(Stream f)
-    {
-        return (ulong) ReadStrU64(f);
-    }
-    
-    bool read_bool(Stream f)
-    {
-        return ReadStrBool(f);
-    }
-    
-    float read_f32(Stream f)
-    {
-        return ReadStrDecimal(f);
-    }
-    double read_f64(Stream f)
-    {
-        return ReadStrDecimal(f);
+        bool first = true;
+        bool[] knows_dimsize = new bool[rank];
+        int cur_dim = rank-1;
+        int[] elems_read_in_dim = new int[rank];
+        int[] shape = new int[rank];
+
+        int capacity = 100;
+        T[] data = new T[capacity];
+        int write_ptr = 0;
+
+        while (true) {
+            SkipSpaces();
+
+            char c = (char) GetChar();
+            if (c == ']') {
+                if (knows_dimsize[cur_dim]) {
+                    if (shape[cur_dim] != elems_read_in_dim[cur_dim]) {
+                        throw new Exception("Irregular array");
+                    }
+                } else {
+                    knows_dimsize[cur_dim] = true;
+                    shape[cur_dim] = elems_read_in_dim[cur_dim];
+                }
+                if (cur_dim == 0) {
+                    break;
+                } else {
+                    cur_dim--;
+                    elems_read_in_dim[cur_dim]++;
+                }
+            } else if (c == ',') {
+                SkipSpaces();
+                c = (char) GetChar();
+                if (c == '[') {
+                    if (cur_dim == rank - 1) {
+                        throw new Exception("Array has too many dimensions");
+                    }
+                    first = true;
+                    cur_dim++;
+                    elems_read_in_dim[cur_dim] = 0;
+                } else if (cur_dim == rank - 1) {
+                    UngetChar(c);
+
+                    data[write_ptr++] = ReadStrScalar();
+                    if (write_ptr == capacity) {
+                        capacity *= 2;
+                        Array.Resize(ref data, capacity);
+                    }
+                    elems_read_in_dim[cur_dim]++;
+                } else {
+                    throw new Exception("Unexpected comma when reading array");
+                }
+            } else if (first) {
+                if (c == '[') {
+                    if (cur_dim == rank - 1) {
+                        throw new Exception("Array has too many dimensions");
+                    }
+                    cur_dim++;
+                    elems_read_in_dim[cur_dim] = 0;
+                } else {
+                    UngetChar(c);
+                    data[write_ptr++] = ReadStrScalar();
+                    if (write_ptr == capacity) {
+                        capacity *= 2;
+                        Array.Resize(ref data, capacity);
+                    }
+                    elems_read_in_dim[cur_dim]++;
+                    first = false;
+                }
+            } else {
+                throw new Exception("Unexpected character in array");
+            }
+        }
+        Array.Resize(ref data, write_ptr);
+        return (shape, data);
     }
 
-
-    Stream getStream()
+    public (T[], int[]) ReadStrArrayEmpty<T>(int rank, string typeName, Func<T> ReadStrScalar)
     {
-        return Console.OpenStandardInput();
+        ParseSpecificString("empty");
+        ParseSpecificChar('(');
+        for (int i = 0; i < rank; i++) {
+            ParseSpecificString("[]");
+        }
+        ParseSpecificString(typeName);
+        ParseSpecificChar(')');
+
+        return (new T[0], new int[rank]);
+    }
+
+    public (T[], int[]) ReadStrArray<T>(int rank, string typeName, Func<T> ReadStrScalar)
+    {
+        long read_dims = 0;
+
+        while (true) {
+            SkipSpaces();
+            var c = GetChar();
+            if (c=='[') {
+                read_dims++;
+            } else {
+                if (c != null) {
+                    UngetChar((char)c);
+                }
+            }
+            break;
+        }
+
+        if (read_dims == 0) {
+            return ReadStrArrayEmpty(rank, typeName, ReadStrScalar);
+        }
+
+        if (read_dims != rank) {
+            throw new Exception("Wrong number of dimensions");
+        }
+
+        return ReadStrArrayElems(rank, ReadStrScalar);
+    }
+
+    public sbyte read_i8()
+    {
+        return (sbyte) ReadStrI8();
+    }
+    public short read_i16()
+    {
+        return (short) ReadStrI16();
+    }
+    public int read_i32()
+    {
+        return ReadStrI32();
+    }
+    public long read_i64()
+    {
+        return ReadStrI64();
+    }
+
+    public byte read_u8()
+    {
+        return (byte) ReadStrU8();
+    }
+    public ushort read_u16()
+    {
+        return (ushort) ReadStrU16();
+    }
+    public uint read_u32()
+    {
+        return (uint) ReadStrU32();
+    }
+    public ulong read_u64()
+    {
+        return (ulong) ReadStrU64();
+    }
+
+    public bool read_bool()
+    {
+        return ReadStrBool();
+    }
+
+    public float read_f32()
+    {
+        return ReadStrDecimal();
+    }
+    public double read_f64()
+    {
+        return ReadStrDecimal();
     }
