@@ -333,7 +333,7 @@ copyOpenCLMemory destmem destidx (Imp.Space "device") srcmem srcidx Imp.DefaultS
     [ ifNotZeroSize nbytes $
       Exp $ CS.simpleCall "CL10.EnqueueWriteBuffer"
         [ Var "queue", Var destmem', Var "synchronous"
-        , CS.toIntPtr destidx, nbytes, CS.toIntPtr $ Var ptr
+        , CS.toIntPtr destidx, CS.toIntPtr nbytes, CS.toIntPtr $ Var ptr
         , srcidx, Null, Null]
     ]
 
@@ -392,9 +392,9 @@ packArrayOutput mem "device" bt ept dims = do
   let size = foldr (BinOp "*") (Integer 1) dims'
   let bt' = CS.compilePrimTypeToASText bt ept
   let nbytes = BinOp "*" (CS.sizeOf bt') size
-  let createArray = "createArray_"++ pretty bt'
+  let createTuple = "createTuple_"++ pretty bt'
 
-  return $ CS.simpleCall createArray [ Var $ CS.compileName mem, Var "ctx.opencl.queue"
+  return $ CS.simpleCall createTuple [ Var $ CS.compileName mem, Var "ctx.opencl.queue"
                                      , Bool True, nbytes
                                      , CreateArray (Primitive $ CSInt Int64T) dims']
   where dims' = map CS.compileDim dims
@@ -420,8 +420,8 @@ unpackArrayInput mem memsize "device" t _ dims e = do
       [ ifNotZeroSize memsize' $
         Exp $ CS.simpleCall "CL10.EnqueueWriteBuffer"
         [ Var "ctx.opencl.queue", Var $ CS.compileName mem, Var "synchronous"
-        ,CS.toIntPtr (Integer 0), memsize', CS.toIntPtr (Var ptr)
-        ,CS.toIntPtr (Integer 0), Null, Null]
+        , CS.toIntPtr (Integer 0), CS.toIntPtr memsize', CS.toIntPtr (Var ptr)
+        , Integer 0, Null, Null]
       ]]
 
   where mem_dest = Var $ CS.compileName mem

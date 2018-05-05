@@ -431,6 +431,7 @@ compileProg module_name constructor imports defines ops userstate boilerplate pr
         at_inits = [ Reassign (Var "do_warmup_run") (Bool False)
                    , Reassign (Var "num_runs") (Integer 1)
                    , Reassign (Var "entry_point") (String "main")
+                   , Exp $ simpleCall "ValueReader" []
                    ]
 
         defines' = [ Escape csScalar
@@ -757,7 +758,7 @@ printStm (Imp.ArrayValue mem memsize space bt ept (outer:shape)) e = do
     [puts emptystr]
     [Assign (Var $ pretty first) $ Var "true",
      puts "[",
-     ForEach (pretty v) e [
+     ForEach (pretty v) (Field e "Item1") [
         If (simpleCall "!" [Var $ pretty first])
         [puts ", "] [],
         printelem,
@@ -797,6 +798,14 @@ prepareEntry (fname, Imp.Function _ outputs inputs _ results args) = do
   let (output_types, output_paramNames) = unzip $ map compileTypedInput outputs
       funTuple = tupleOrSingle $ fmap Var output_paramNames
 
+
+  (_, sizeDecls) <- collect' $ forM args $ \case
+    Imp.TransparentValue (Imp.ArrayValue mem _ Imp.DefaultSpace _ _ _) ->
+      stm $ Assign (Var $ compileName mem ++ "_nbytes") (Var $ compileName mem ++ ".Length")
+    Imp.TransparentValue (Imp.ArrayValue mem _ (Imp.Space _) bt _ dims) ->
+      stm $ Assign (Var $ compileName mem ++ "_nbytes") $ foldr (BinOp "*" . compileDim) (sizeOf $ compilePrimTypeToAST bt) dims
+    _ -> stm Pass
+
   (argexps_mem_copies, prepare_run) <- collect' $ forM inputs $ \case
     Imp.MemParam name space -> do
       -- A program might write to its input parameters, so create a new memory
@@ -806,7 +815,7 @@ prepareEntry (fname, Imp.Function _ outputs inputs _ results args) = do
       copy <- asks envCopy
       allocate <- asks envAllocate
 
-      let size = Var (compileName name ++ ".Length") -- FIXME
+      let size = Var (compileName name ++ "_nbytes")
           dest = name'
           src = name
           offset = Integer 0
@@ -835,14 +844,15 @@ prepareEntry (fname, Imp.Function _ outputs inputs _ results args) = do
       output_type = tupleOrSingleT output_types
       call_lib = [Reassign funTuple $ simpleCall fname' (fmap Var argexps_lib)]
       call_bin = [Reassign funTuple $ simpleCall fname' (fmap Var argexps_bin)]
-      prepareIn' = prepareIn ++ mem_copy_inits
+      prepareIn' = prepareIn ++ mem_copy_inits ++ sizeDecls
 
   return (nameToString fname, inputs', output_type,
           prepareIn', call_lib, call_bin, prepareOut,
           zip results res, prepare_run)
 
   where liftMaybe (Just a, b) = Just (a,b)
-        liftMaybe (Nothing, _) = Nothing
+        liftMaybe _ = Nothing
+
         initCopy (varName, Imp.MemParam _ space) = declMem' varName space
         initCopy _ = Pass
 
@@ -878,8 +888,6 @@ callEntryFun :: [CSStmt] -> (Name, Imp.Function op)
              -> CompilerM op s (CSFunDef, String, CSExp)
 callEntryFun pre_timing entry@(fname, Imp.Function _ outputs _ _ _ decl_args) = do
   (_, _, outputType, prepareIn, _, body_bin, _, res, prepare_run) <- prepareEntry entry
-
-  stm $ Exp $ simpleCall "ValueReader" []
   let str_input = map (readInput) decl_args
   let outputDecls = map getDefaultDecl outputs
       exitcall = [
