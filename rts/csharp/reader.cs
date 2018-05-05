@@ -467,7 +467,7 @@
             }
         }
         Array.Resize(ref data, write_ptr);
-        return (shape, data);
+        return (data, shape);
     }
 
     public (T[], int[]) ReadStrArrayEmpty<T>(int rank, string typeName, Func<T> ReadStrScalar)

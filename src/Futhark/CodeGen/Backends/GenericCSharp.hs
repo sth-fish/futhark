@@ -60,6 +60,7 @@ module Futhark.CodeGen.Backends.GenericCSharp
   , publicName
   , sizeOf
   , funDef
+  , getDefaultDecl
   ) where
 
 import Control.Monad.Identity
@@ -618,7 +619,6 @@ entryPointInput (_, Imp.TransparentValue (Imp.ArrayValue mem memsize Imp.Default
       stm $ Assign (Var $ compileName sizevar) $ Field e "Item2.Length"
     Imp.ConstSize _ ->
       return ()
-
   stm $ Assign dest unwrap_call
 
 entryPointInput (_, Imp.TransparentValue (Imp.ArrayValue mem memsize (Imp.Space sid) bt ept dims), e) = do
@@ -704,11 +704,11 @@ readInput decl@(Imp.TransparentValue (Imp.ScalarValue bt ept _)) =
 -- problem for the C runtime system.
 readInput decl@(Imp.TransparentValue (Imp.ArrayValue _ _ _ bt ept dims)) =
   let rank' = Var $ show $ length dims
-      type_enum = Var $ readTypeEnum bt ept
+      type_enum = String $ readTypeEnum bt ept
       bt' =  compilePrimTypeExt bt ept
-      read_func =  readFun bt ept
+      read_func =  Var $ readFun bt ept
       readStrArray = initializeGenericFunction "ReadStrArray" bt'
-  in Assign (Var $ extValueDescName decl) $ simpleCall readStrArray [rank', type_enum, Var read_func]
+  in Assign (Var $ extValueDescName decl) $ simpleCall readStrArray [rank', type_enum, read_func]
 
 initializeGenericFunction :: String -> String -> String
 initializeGenericFunction fun tp = fun ++ "<" ++ tp ++ ">"
@@ -805,25 +805,29 @@ prepareEntry (fname, Imp.Function _ outputs inputs _ results args) = do
       name' <- newVName $ baseString name <> "_copy"
       copy <- asks envCopy
       allocate <- asks envAllocate
-      let size = Var (extName (compileName name) ++ ".Length") -- FIXME
+
+      let size = Var (compileName name ++ ".Length") -- FIXME
           dest = name'
           src = name
           offset = Integer 0
       case space of
         DefaultSpace ->
-          stm $ Assign (Var (compileName name'))
+          stm $ Reassign (Var (compileName name'))
                        (simpleCall "allocateMem" [size]) -- FIXME
         Space sid ->
           allocate name' size sid
       copy dest offset space src offset space size (IntType Int64) -- FIXME
-      return $ Just $ compileName name'
+      return $ Just (compileName name')
     _ -> return Nothing
 
   prepareIn <- collect $ mapM_ entryPointInput $ zip3 [0..] args $
                map (Var . extValueDescName) args
   (res, prepareOut) <- collect' $ mapM entryPointOutput results
 
-  let argexps_lib = map (compileName . Imp.paramName) inputs
+  let mem_copies = mapMaybe liftMaybe $ zip argexps_mem_copies inputs
+      mem_copy_inits = map initCopy mem_copies
+
+      argexps_lib = map (compileName . Imp.paramName) inputs
       argexps_bin = zipWith fromMaybe argexps_lib argexps_mem_copies
       fname' = futharkFun (nameToString fname)
       arg_types = map (fst . compileTypedInput) inputs
@@ -831,11 +835,16 @@ prepareEntry (fname, Imp.Function _ outputs inputs _ results args) = do
       output_type = tupleOrSingleT output_types
       call_lib = [Reassign funTuple $ simpleCall fname' (fmap Var argexps_lib)]
       call_bin = [Reassign funTuple $ simpleCall fname' (fmap Var argexps_bin)]
+      prepareIn' = prepareIn ++ mem_copy_inits
 
   return (nameToString fname, inputs', output_type,
-          prepareIn, call_lib, call_bin, prepareOut,
+          prepareIn', call_lib, call_bin, prepareOut,
           zip results res, prepare_run)
 
+  where liftMaybe (Just a, b) = Just (a,b)
+        liftMaybe (Nothing, _) = Nothing
+        initCopy (varName, Imp.MemParam _ space) = declMem' varName space
+        initCopy _ = Pass
 
 copyMemoryDefaultSpace :: VName -> CSExp -> VName -> CSExp -> CSExp ->
                           CompilerM op s ()
@@ -850,7 +859,6 @@ compileEntryFun entry@(_,Imp.Function _ outputs _ _ results args) = do
   let params = map (getType &&& extValueDescName) args
   let outputType = tupleOrSingleT $ map getType results
 
-
   (fname', _, _, prepareIn, body_lib, _, prepareOut, res, _) <- prepareEntry entry
   let ret = Return $ tupleOrSingle $ map snd res
   let outputDecls = map getDefaultDecl outputs
@@ -864,10 +872,6 @@ compileEntryFun entry@(_,Imp.Function _ outputs _ _ results args) = do
         getType (Imp.TransparentValue (Imp.ArrayValue _ _ _ primtype signedness _)) =
           let t = compilePrimTypeToASText primtype signedness
           in Composite $ TupleT [Composite $ ArrayT t, Composite $ ArrayT $ Primitive $ CSInt Int64T]
-
-
-
-        
 
 
 callEntryFun :: [CSStmt] -> (Name, Imp.Function op)
@@ -1280,10 +1284,13 @@ publicName :: String -> String
 publicName s = "futhark_" ++ s
 
 declMem :: VName -> Space -> CompilerM op s ()
-declMem name DefaultSpace =
-  stm $ AssignTyped (Composite $ ArrayT $ Primitive ByteT) (Var $ compileName name) Nothing
-declMem name (Space _) =
-  stm $ AssignTyped (CustomT "CLMemoryHandle") (Var $ compileName name) (Just $ Var "ctx.EMPTY_MEM_HANDLE")
+declMem name space = stm $ declMem' (compileName name) space
+
+declMem' :: String -> Space -> CSStmt
+declMem' name DefaultSpace =
+  AssignTyped (Composite $ ArrayT $ Primitive ByteT) (Var name) Nothing
+declMem' name (Space _) =
+  AssignTyped (CustomT "CLMemoryHandle") (Var name) (Just $ Var "ctx.EMPTY_MEM_HANDLE")
 
 memToCSType :: Space -> CompilerM op s CSType
 memToCSType = return . rawMemCSType

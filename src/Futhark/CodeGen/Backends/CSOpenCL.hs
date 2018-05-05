@@ -333,7 +333,7 @@ copyOpenCLMemory destmem destidx (Imp.Space "device") srcmem srcidx Imp.DefaultS
     [ ifNotZeroSize nbytes $
       Exp $ CS.simpleCall "CL10.EnqueueWriteBuffer"
         [ Var "queue", Var destmem', Var "synchronous"
-        ,CS.toIntPtr destidx, nbytes,CS.toIntPtr $ Var ptr
+        , CS.toIntPtr destidx, nbytes, CS.toIntPtr $ Var ptr
         , srcidx, Null, Null]
     ]
 
@@ -345,7 +345,7 @@ copyOpenCLMemory destmem destidx (Imp.Space "device") srcmem srcidx (Imp.Space "
   CS.stm $ ifNotZeroSize nbytes $
     Exp $ CS.simpleCall "CL10.EnqueueCopyBuffer"
       [ Var "ctx.opencl.queue", Var srcmem', Var destmem'
-      ,CS.toIntPtr srcidx,CS.toIntPtr destidx,CS.toIntPtr nbytes
+      , CS.toIntPtr srcidx, CS.toIntPtr destidx, CS.toIntPtr nbytes
       , Integer 0, Null, Null]
   finishIfSynchronous
 
@@ -410,18 +410,25 @@ unpackArrayInput mem memsize "device" t _ dims e = do
   zipWithM_ (CS.unpackDim e) dims [0..]
   ptr <- pretty <$> newVName "ptr"
 
+  CS.stm $ compileMemsize memsize nbytes
+
   let memsize' = CS.compileDim memsize
+
+  CS.stm $ CS.getDefaultDecl (Imp.MemParam mem (Imp.Space "device"))
   allocateOpenCLBuffer mem memsize' "device"
-  CS.stm $ Unsafe [Fixed (CS.assignArrayPointer (Field e "array") (Var ptr))
+  CS.stm $ Unsafe [Fixed (CS.assignArrayPointer (Field e "Item1") (Var ptr))
       [ ifNotZeroSize memsize' $
         Exp $ CS.simpleCall "CL10.EnqueueWriteBuffer"
         [ Var "ctx.opencl.queue", Var $ CS.compileName mem, Var "synchronous"
-        ,CS.toIntPtr (Integer 0), memsize',CS.toIntPtr (Var ptr)
+        ,CS.toIntPtr (Integer 0), memsize', CS.toIntPtr (Var ptr)
         ,CS.toIntPtr (Integer 0), Null, Null]
       ]]
 
   where mem_dest = Var $ CS.compileName mem
         dims' = map CS.compileDim dims
+        compileMemsize (Imp.VarSize v) nbytes = Assign (Var $ CS.compileName v) nbytes
+        compileMemsize _ _                    = Pass
+
 unpackArrayInput _ _ sid _ _ _ _ =
   fail $ "Cannot accept array from " ++ sid ++ " space."
 
