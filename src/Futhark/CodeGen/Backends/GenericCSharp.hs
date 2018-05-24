@@ -284,7 +284,7 @@ getDefaultDecl :: Imp.Param -> CSStmt
 getDefaultDecl (Imp.MemParam v DefaultSpace) =
   Assign (Var $ compileName v) $ simpleCall "allocateMem" [Integer 0]
 getDefaultDecl (Imp.MemParam v _) =
-  AssignTyped (CustomT "CLMemoryHandle") (Var $ compileName v) (Just $ Var "ctx.EMPTY_MEM_HANDLE")
+  AssignTyped (CustomT "opencl_memblock") (Var $ compileName v) (Just $ Var "ctx.EMPTY_MEMBLOCK")
 getDefaultDecl (Imp.ScalarParam v Cert) =
   Assign (Var $ compileName v) $ Bool True
 getDefaultDecl (Imp.ScalarParam v t) =
@@ -1298,14 +1298,14 @@ declMem' :: String -> Space -> CSStmt
 declMem' name DefaultSpace =
   AssignTyped (Composite $ ArrayT $ Primitive ByteT) (Var name) Nothing
 declMem' name (Space _) =
-  AssignTyped (CustomT "CLMemoryHandle") (Var name) (Just $ Var "ctx.EMPTY_MEM_HANDLE")
+  AssignTyped (CustomT "opencl_memblock") (Var name) (Just $ Var "ctx.EMPTY_MEMBLOCK")
 
 memToCSType :: Space -> CompilerM op s CSType
 memToCSType = return . rawMemCSType
 
 rawMemCSType :: Space -> CSType
 rawMemCSType DefaultSpace = Composite $ ArrayT $ Primitive ByteT
-rawMemCSType (Space _) = CustomT "CLMemoryHandle"
+rawMemCSType (Space _) = CustomT "opencl_memblock"
 
 toIntPtr :: CSExp -> CSExp
 toIntPtr e = simpleInitClass "IntPtr" [e]

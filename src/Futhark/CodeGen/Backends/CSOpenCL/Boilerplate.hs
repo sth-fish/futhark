@@ -107,8 +107,8 @@ generateBoilerplate opencl_code opencl_prelude kernel_names types sizes = do
     [Reassign (Var "_cfg.opencl.default_threshold") (Var "size")]
 
   CS.stm $ CS.funDef cfg_set_size (Primitive BoolT) [(RefT $ CustomT cfg, "_cfg")
-                                                 ,(stringT, "size_name")
-                                                 ,(intT, "size_value")]
+                                                    , (stringT, "size_name")
+                                                    , (intT, "size_value")]
     [ AST.For "i" ((Integer . toInteger) $ M.size sizes)
       [ If (BinOp "==" (Var "size_name") (Index (Var "size_names") (IdxExp (Var "i"))))
           [ Reassign (Index (Var "_cfg.sizes") (IdxExp (Var "i"))) (Var "size_value")
@@ -125,6 +125,8 @@ generateBoilerplate opencl_code opencl_prelude kernel_names types sizes = do
   CS.stm $ StructDef ctx $
     [ (Primitive IntPtrT, "NULL")
     , (CustomT "CLMemoryHandle", "EMPTY_MEM_HANDLE")
+    , (CustomT "opencl_memblock", "EMPTY_MEMBLOCK")
+    , (CustomT "opencl_free_list", "free_list")
     , (Primitive BoolT, "detail_memory")
     , (Primitive BoolT, "debugging")
     , (CustomT "opencl_context", "opencl")
@@ -139,6 +141,7 @@ generateBoilerplate opencl_code opencl_prelude kernel_names types sizes = do
   CS.beforeParse $ Reassign (Var "cfg") $ CS.simpleCall new_cfg []
   CS.atInit $ Exp $ CS.simpleCall new_ctx [Var "cfg"]
   CS.atInit $ Reassign (Var "ctx.EMPTY_MEM_HANDLE") $ CS.simpleCall "empty_mem_handle" [Var "ctx.opencl.context"]
+  CS.atInit $ Reassign (Var "ctx.EMPTY_MEMBLOCK") $ CS.simpleCall "empty_memblock" [Var "ctx.EMPTY_MEM_HANDLE"]
 
   CS.addMemberDecl $ AssignTyped (Primitive BoolT) (Var "synchronous") (Just $ AST.Bool False)
 

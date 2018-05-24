@@ -43,6 +43,134 @@ struct opencl_config
     public string[] size_classes;
 }
 
+
+void MemblockUnrefDevice(ref futhark_context context, ref opencl_memblock block)
+{
+    if (block.references != 0)
+    {
+        block.decrease_refs();
+        if (context.detail_memory)
+        {
+            Console.Error.WriteLine(String.Format(
+                "Unreferencing block {0} (allocated as {1}) in {2}: {3} references remaining.",
+                desc, block.desc, "space 'device'", block.references);
+        }
+
+        if (block.references == 0)
+        {
+            context.cur_mem_usage_device -= block.size;
+            OPENCL_SUCCEED(OpenCLFree(ref context, block.mem, block.desc));
+        }
+
+        if (context.detail_memory)
+        {
+            Console.Error.WriteLine(String.Format(
+                "{0} bytes freed (now allocated: {1} bytes)",
+                block.size, context.cur_mem_usage_device);
+        }
+    }
+}
+
+void MemblockAllocDevice(ref futhark_context context, ref opencl_memblock block,
+                         ref opencl_free_list free_list, long size,
+                         out ComputeErrorCode err_code, string desc)
+{
+    if (size < 0)
+    {
+        panic(1, String.Format("Negative allocation of {0} bytes attempted for {1} in {2}",
+                               size, desc);
+    }
+    if block != context.EMPTY_MEMBLOCK
+    {
+        MemblockUnrefDevice(ref context, ref block);
+    }
+    
+    CLMemoryHandle mem;
+    OPENCL_SUCCEED(OpenCLAlloc(ctx.opencl, size, desc, out mem));
+    
+    block = new opencl_memblock();
+    block.references = 1;
+    block.size = size;
+    block.desc = desc;
+    block.mem = mem;
+    context.cur_mem_usage_device += size;
+
+    if (context.detail_memory)
+    {
+        Console.Error.Write(String.Format("Allocated {0} bytes for {1} in {2} (now allocated: {3} bytes)",
+            size, desc, "space 'device'", ctx.cur_mem_usage_device))
+    }
+
+    if (context.cur_mem_usage_device > context.peak_mem_usage_device)
+    {
+        context.peak_mem_usage_device = context.cur_mem_usage_device;
+        if (context.detail_memory)
+        {
+            Console.Error.Write(" (new peak).\n");
+        }
+    }
+    else if (context.detail_memory)
+    {
+        Console.Error.Write(".\n");
+    }
+}
+
+
+struct opencl_memblock
+{
+    public int references;
+    public CLMemoryHandle mem;
+    public long size;
+    public string tag;
+
+    public void increase_refs()
+    {
+        this.references += 1;
+    }
+
+    public void decrease_refs()
+    {
+        this.references -= 1;
+    }
+}
+
+opencl_memblock empty_memblock(CLMemoryHandle mem)
+{
+    var block = new opencl_memblock();
+    block.mem = mem;
+    block.references = 0;
+    block.tag = "";
+    block.size = 0;
+
+    return block;
+}
+
+struct opencl_free_list_entry
+{
+    public bool valid;
+    public CLMemoryHandle mem;
+    public long size;
+    public string tag;
+}
+
+struct opencl_free_list
+{
+    public List<opencl_free_list_entry> entries;
+    public int capacity;
+    public int used;
+}
+
+opencl_free_list opencl_free_list_init()
+{
+    int CAPACITY = 30; // arbitrarily chosen
+    var free_list = new opencl_free_list();
+    free_list.entries = new List<opencl_free_list_entry>(CAPACITY);
+    free_list.capacity = CAPACITY;
+    free_list.used = 0;
+
+    return free_list;
+}
+
 void opencl_config_init(out opencl_config cfg,
                         int num_sizes,
                         string[] size_names,

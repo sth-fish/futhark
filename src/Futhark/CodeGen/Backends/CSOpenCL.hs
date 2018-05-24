@@ -228,7 +228,7 @@ launchKernel kernel_name kernel_dims workgroup_dims args = do
 
         processKernelArg kernel argnum (Imp.MemKArg v) =
           return [ Comment "MemKArg" []
-                 , Exp $ getKernelCall kernel argnum (CS.sizeOf $ Primitive IntPtrT) (Var $ CS.compileName v) ]
+                 , Exp $ getKernelCall kernel argnum (CS.sizeOf $ Primitive IntPtrT) (memblockFromMem v)]
 
         processKernelArg kernel argnum (Imp.SharedMemoryKArg (Imp.Count num_bytes)) = do
           num_bytes' <- CS.compileExp num_bytes
@@ -255,7 +255,7 @@ getKernelCall :: String -> Integer -> CSExp -> CSExp -> CSExp
 getKernelCall kernel arg_num size Null =
   CS.simpleCall "CL10.SetKernelArg" [ Var kernel, Integer arg_num, CS.toIntPtr size, Var "ctx.NULL"]
 getKernelCall kernel arg_num size e =
-  CS.simpleCall "CL10.SetKernelArg" [ Var kernel, Integer arg_num, CS.toIntPtr size,CS.toIntPtr $ Addr e]
+  CS.simpleCall "CL10.SetKernelArg" [ Var kernel, Integer arg_num, CS.toIntPtr size, CS.toIntPtr $ Addr e]
 
 castToIntPtr :: CSExp -> CSExp
 castToIntPtr = Cast (CustomT "IntPtr")
@@ -263,7 +263,6 @@ castToIntPtr = Cast (CustomT "IntPtr")
 writeOpenCLScalar :: CS.WriteScalar Imp.OpenCL ()
 writeOpenCLScalar mem i bt "device" val = do
   CS.stm $ comment "writescalar"
-  let mem' = CS.compileName mem
   let bt' = CS.compilePrimTypeToAST bt
   scalar <- newVName' "scalar"
   ptr <- newVName' "ptr"
@@ -271,7 +270,7 @@ writeOpenCLScalar mem i bt "device" val = do
     [ AssignTyped bt' (Var scalar) (Just val)
     , AssignTyped (PointerT VoidT) (Var ptr) (Just $ Addr $ Var scalar)
     , Exp $ CS.simpleCall "CL10.EnqueueWriteBuffer"
-        [ Var "ctx.opencl.queue", Var mem', Var "synchronous"
+        [ Var "ctx.opencl.queue", memblockFromMem mem, Var "synchronous"
         ,CS.toIntPtr i,CS.toIntPtr $ CS.sizeOf bt',CS.toIntPtr $ Var ptr
     , Integer 0, Null, Null]
     ]
@@ -283,12 +282,11 @@ readOpenCLScalar :: CS.ReadScalar Imp.OpenCL ()
 readOpenCLScalar mem i bt "device" = do
   val <- newVName' "read_res"
   let bt' = CS.compilePrimTypeToAST bt
-  let mem' = CS.compileName mem
   CS.stm $ comment "readscalar"
   CS.stm $ AssignTyped bt' (Var val) (Just $ CS.simpleInitClass (pretty bt') [])
   CS.stm $ Exp $ CS.simpleCall "CL10.EnqueueReadBuffer"
-             [ Var "ctx.opencl.queue", Var mem' , Bool True
-             ,CS.toIntPtr i, CS.sizeOf bt',CS.toIntPtr $ Ref $ Var val
+             [ Var "ctx.opencl.queue", memblockFromMem mem , Bool True
+             , CS.toIntPtr i, CS.sizeOf bt',CS.toIntPtr $ Ref $ Var val
              , Integer 0, Null, Null]
   return $ Var val
 
@@ -303,48 +301,44 @@ allocateOpenCLBuffer mem size "device" = do
   errcode <- CS.compileName <$> newVName "err_code"
   CS.stm $ AssignTyped computeErrCodeT (Var errcode) Nothing
   CS.stm $ Reassign (Var $ CS.compileName mem) $
-    CS.simpleCall "CL10.CreateBuffer" [ Var "ctx.opencl.context", Var "ComputeMemoryFlags.ReadWrite"
-                                      ,CS.toIntPtr size, Var "IntPtr.Zero"
-                                      , Out $ Var errcode ]
+    CS.simpleCall "OpenCLAlloc" [ Var "ctx.opencl.context", Var "ComputeMemoryFlags.ReadWrite"
+                                , CS.toIntPtr size, Var "IntPtr.Zero"
+                                , Out $ Var errcode ]
 
 allocateOpenCLBuffer _ _ space =
   fail $ "Cannot allocate in '" ++ space ++ "' space"
 
 copyOpenCLMemory :: CS.Copy Imp.OpenCL ()
-copyOpenCLMemory destmem destidx Imp.DefaultSpace srcmem srcidx (Imp.Space "device") nbytes bt = do
-  let srcmem'  = Var $ CS.compileName srcmem
+copyOpenCLMemory destmem destidx Imp.DefaultSpace srcmem srcidx (Imp.Space "device") nbytes _ = do
   let destmem' = Var $ CS.compileName destmem
   ptr <- newVName' "ptr"
   CS.stm $ comment "copymemory def to device"
   CS.stm $ Fixed (CS.assignArrayPointer destmem' (Var ptr))
     [ ifNotZeroSize nbytes $
       Exp $ CS.simpleCall "CL10.EnqueueReadBuffer"
-      [ Var "ctx.opencl.queue", srcmem', Var "synchronous"
-      ,CS.toIntPtr srcidx, nbytes,CS.toIntPtr $ Var ptr
-      ,CS.toIntPtr destidx, Null, Null]
+      [ Var "ctx.opencl.queue", memblockFromMem srcmem, Var "synchronous"
+      , CS.toIntPtr srcidx, nbytes,CS.toIntPtr $ Var ptr
+      , CS.toIntPtr destidx, Null, Null]
     ]
 
 copyOpenCLMemory destmem destidx (Imp.Space "device") srcmem srcidx Imp.DefaultSpace nbytes _ = do
-  let destmem' = CS.compileName destmem
   let srcmem'  = CS.compileName srcmem
   ptr <- newVName' "ptr"
   CS.stm $ comment "copymemory device to def"
   CS.stm $ Fixed (CS.assignArrayPointer (Var srcmem') (Var ptr))
     [ ifNotZeroSize nbytes $
       Exp $ CS.simpleCall "CL10.EnqueueWriteBuffer"
-        [ Var "queue", Var destmem', Var "synchronous"
+        [ Var "queue", memblockFromMem destmem, Var "synchronous"
         , CS.toIntPtr destidx, CS.toIntPtr nbytes, CS.toIntPtr $ Var ptr
         , srcidx, Null, Null]
     ]
 
 copyOpenCLMemory destmem destidx (Imp.Space "device") srcmem srcidx (Imp.Space "device") nbytes _ = do
-  let destmem' = CS.compileName destmem
-  let srcmem'  = CS.compileName srcmem
 
   CS.stm $ comment "copymemory device to device"
   CS.stm $ ifNotZeroSize nbytes $
     Exp $ CS.simpleCall "CL10.EnqueueCopyBuffer"
-      [ Var "ctx.opencl.queue", Var srcmem', Var destmem'
+      [ Var "ctx.opencl.queue", memblockFromMem srcmem, memblockFromMem destmem
       , CS.toIntPtr srcidx, CS.toIntPtr destidx, CS.toIntPtr nbytes
       , Integer 0, Null, Null]
   finishIfSynchronous
@@ -374,8 +368,8 @@ staticOpenCLArray name "device" t vs = do
     CS.stm $ Fixed (CS.assignArrayPointer (Var tmp_arr) (Var ptr))
       [ ifNotZeroSize size $
           Exp $ CS.simpleCall "CL10.EnqueueWriteBuffer"
-          [ Var "ctx.opencl.queue", Var $ CS.compileName static_mem, Var "synchronous"
-          ,CS.toIntPtr (Integer 0),CS.toIntPtr size
+          [ Var "ctx.opencl.queue", memblockFromMem static_mem, Var "synchronous"
+          , CS.toIntPtr (Integer 0),CS.toIntPtr size
           , Var ptr, Integer 0, Null, Null ]
 
                                                   ]
@@ -387,6 +381,11 @@ staticOpenCLArray name "device" t vs = do
 staticOpenCLArray _ space _ _ =
   fail $ "CSOpenCL backend cannot create static array in memory space '" ++ space ++ "'"
 
+memblockFromMem :: VName -> CSExp
+memblockFromMem mem =
+  let mem' = Var $ CS.compileName mem
+  in Field mem' "mem"
+
 packArrayOutput :: CS.EntryOutput Imp.OpenCL ()
 packArrayOutput mem "device" bt ept dims = do
   let size = foldr (BinOp "*") (Integer 1) dims'
@@ -394,7 +393,7 @@ packArrayOutput mem "device" bt ept dims = do
   let nbytes = BinOp "*" (CS.sizeOf bt') size
   let createTuple = "createTuple_"++ pretty bt'
 
-  return $ CS.simpleCall createTuple [ Var $ CS.compileName mem, Var "ctx.opencl.queue"
+  return $ CS.simpleCall createTuple [ memblockFromMem mem, Var "ctx.opencl.queue"
                                      , Bool True, nbytes
                                      , CreateArray (Primitive $ CSInt Int64T) dims']
   where dims' = map CS.compileDim dims
@@ -419,7 +418,7 @@ unpackArrayInput mem memsize "device" t _ dims e = do
   CS.stm $ Unsafe [Fixed (CS.assignArrayPointer (Field e "Item1") (Var ptr))
       [ ifNotZeroSize memsize' $
         Exp $ CS.simpleCall "CL10.EnqueueWriteBuffer"
-        [ Var "ctx.opencl.queue", Var $ CS.compileName mem, Var "synchronous"
+        [ Var "ctx.opencl.queue", memblockFromMem mem, Var "synchronous"
         , CS.toIntPtr (Integer 0), CS.toIntPtr memsize', CS.toIntPtr (Var ptr)
         , Integer 0, Null, Null]
       ]]
