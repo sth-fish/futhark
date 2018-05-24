@@ -72,6 +72,7 @@ import Control.Arrow((&&&))
 import Data.Maybe
 import Data.List
 import qualified Data.Map.Strict as M
+import qualified Data.DList as DL
 
 import Futhark.Representation.Primitive hiding (Bool)
 import Futhark.MonadFreshNames
@@ -1286,6 +1287,18 @@ compileCode (Imp.Write dest (Imp.Count idx) elemtype (Imp.Space space) _ elemexp
     <*> compileExp elemexp
 
 compileCode Imp.Skip = return ()
+
+blockScope :: CompilerM op s () -> CompilerM op s [CSStmt]
+blockScope = fmap snd . blockScope'
+
+blockScope' :: CompilerM op s a -> CompilerM op s (a, [CSStmt])
+blockScope' m = pass $ do
+  (x, w) <- listen m
+  let items = DL.toList $ accItems w
+  releases <- collect $ mapM_ (uncurry unRefMem) $ accDeclaredMem w
+  return ((x, items ++ releases),
+          const mempty)
+
 
 -- | Public names must have a consitent prefix.
 publicName :: String -> String

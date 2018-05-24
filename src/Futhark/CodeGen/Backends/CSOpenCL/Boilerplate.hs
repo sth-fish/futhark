@@ -127,6 +127,8 @@ generateBoilerplate opencl_code opencl_prelude kernel_names types sizes = do
     , (CustomT "CLMemoryHandle", "EMPTY_MEM_HANDLE")
     , (CustomT "opencl_memblock", "EMPTY_MEMBLOCK")
     , (CustomT "opencl_free_list", "free_list")
+    , (Primitive $ CSInt Int64T, "cur_mem_usage_device")
+    , (Primitive $ CSInt Int64T, "peak_mem_usage_device")
     , (Primitive BoolT, "detail_memory")
     , (Primitive BoolT, "debugging")
     , (CustomT "opencl_context", "opencl")

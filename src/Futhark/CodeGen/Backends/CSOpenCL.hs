@@ -300,10 +300,7 @@ allocateOpenCLBuffer mem size "device" = do
   CS.stm $ comment "allocatebuffer"
   errcode <- CS.compileName <$> newVName "err_code"
   CS.stm $ AssignTyped computeErrCodeT (Var errcode) Nothing
-  CS.stm $ Reassign (Var $ CS.compileName mem) $
-    CS.simpleCall "OpenCLAlloc" [ Var "ctx.opencl.context", Var "ComputeMemoryFlags.ReadWrite"
-                                , CS.toIntPtr size, Var "IntPtr.Zero"
-                                , Out $ Var errcode ]
+  CS.stm $ Exp $ CS.simpleCall "MemblockAllocDevice" [Ref $ Var "ctx", (Ref . Var) $ CS.compileName mem, size, String $ CS.compileName mem]
 
 allocateOpenCLBuffer _ _ space =
   fail $ "Cannot allocate in '" ++ space ++ "' space"

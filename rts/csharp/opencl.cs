@@ -43,8 +43,7 @@ struct opencl_config
     public string[] size_classes;
 }
 
-
-void MemblockUnrefDevice(ref futhark_context context, ref opencl_memblock block)
+void MemblockUnrefDevice(ref futhark_context context, ref opencl_memblock block, string desc)
 {
     if (block.references != 0)
     {
@@ -53,52 +52,57 @@ void MemblockUnrefDevice(ref futhark_context context, ref opencl_memblock block)
         {
             Console.Error.WriteLine(String.Format(
                 "Unreferencing block {0} (allocated as {1}) in {2}: {3} references remaining.",
-                desc, block.desc, "space 'device'", block.references);
+                desc, block.tag, "space 'device'", block.references));
         }
 
         if (block.references == 0)
         {
             context.cur_mem_usage_device -= block.size;
-            OPENCL_SUCCEED(OpenCLFree(ref context, block.mem, block.desc));
+            OPENCL_SUCCEED(OpenCLFree(ref context, block.mem, block.tag));
         }
 
         if (context.detail_memory)
         {
             Console.Error.WriteLine(String.Format(
                 "{0} bytes freed (now allocated: {1} bytes)",
-                block.size, context.cur_mem_usage_device);
+                block.size, context.cur_mem_usage_device));
         }
     }
 }
 
-void MemblockAllocDevice(ref futhark_context context, ref opencl_memblock block,
-                         ref opencl_free_list free_list, long size,
-                         out ComputeErrorCode err_code, string desc)
+void MemblockSetDevice(ref futhark_context context,
+    ref opencl_memblock lhs, ref opencl_memblock rhs, string lhs_desc)
+{
+    MemblockUnrefDevice(ref context, ref lhs, lhs_desc);
+    rhs.increase_refs();
+    lhs = rhs;
+}
+
+void MemblockAllocDevice(ref futhark_context context, ref opencl_memblock block, long size, string desc)
 {
     if (size < 0)
     {
         panic(1, String.Format("Negative allocation of {0} bytes attempted for {1} in {2}",
-                               size, desc);
+            size, desc));
     }
-    if block != context.EMPTY_MEMBLOCK
+
+    if (!block.Equals(context.EMPTY_MEMBLOCK))
     {
-        MemblockUnrefDevice(ref context, ref block);
+        MemblockUnrefDevice(ref context, ref block, desc);
     }
-    
-    CLMemoryHandle mem;
-    OPENCL_SUCCEED(OpenCLAlloc(ctx.opencl, size, desc, out mem));
-    
+
+    OPENCL_SUCCEED(OpenCLAlloc(ref context, size, desc, ref block.mem));
+
     block = new opencl_memblock();
     block.references = 1;
     block.size = size;
-    block.desc = desc;
-    block.mem = mem;
+    block.tag = desc;
     context.cur_mem_usage_device += size;
 
     if (context.detail_memory)
     {
         Console.Error.Write(String.Format("Allocated {0} bytes for {1} in {2} (now allocated: {3} bytes)",
-            size, desc, "space 'device'", ctx.cur_mem_usage_device))
+            size, desc, "space 'device'", ctx.cur_mem_usage_device));
     }
 
     if (context.cur_mem_usage_device > context.peak_mem_usage_device)
@@ -115,6 +119,120 @@ void MemblockAllocDevice(ref futhark_context context, ref opencl_memblock block,
     }
 }
 
+
+bool free_list_find(ref opencl_free_list free_list, string tag, ref long size_out, ref CLMemoryHandle mem_out)
+{
+    for (int i = 0; i < free_list.capacity; i++)
+    {
+        if (free_list.entries[i].valid && free_list.entries[i].tag == tag)
+        {
+            free_list.entries[i].valid = false;
+            size_out = free_list.entries[i].size;
+            mem_out = free_list.entries[i].mem;
+            free_list.used--;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+ComputeErrorCode OpenCLAlloc(ref futhark_context context, long min_size, string tag, ref CLMemoryHandle mem)
+{
+    if (min_size < 0)
+    {
+        panic(1, "Tried to allocate a negative amount of bytes.");
+    }
+
+    min_size = (min_size < sizeof(int)) ? sizeof(int) : min_size;
+
+    long size = 0;
+
+    if (free_list_find(ref context.free_list, tag, ref size, ref mem))
+    {
+        if (size >= min_size && size <= min_size * 2)
+        {
+            return ComputeErrorCode.Success;
+        }
+        else
+        {
+            ComputeErrorCode code1 = CL10.ReleaseMemObject(mem);
+            if (code1 != ComputeErrorCode.Success)
+            {
+                return code1;
+            }
+        }
+    }
+
+    ComputeErrorCode error;
+    mem = CL10.CreateBuffer(context.opencl.context, ComputeMemoryFlags.ReadWrite
+        , new IntPtr(min_size), IntPtr.Zero, out error);
+
+    return error;
+}
+
+ComputeErrorCode OpenCLFree(ref futhark_context context, CLMemoryHandle mem, string tag)
+{
+    long size = 0;
+    CLMemoryHandle existing_mem = ctx.EMPTY_MEM_HANDLE;
+    ComputeErrorCode error;
+    if (free_list_find(ref context.free_list, tag, ref size, ref existing_mem))
+    {
+        error = CL10.ReleaseMemObject(existing_mem);
+        if (error != ComputeErrorCode.Success)
+        {
+            return error;
+        }
+    }
+
+    error = CL10.GetMemObjectInfo(mem, ComputeMemoryInfo.Size,
+                                  new IntPtr(sizeof(long)), new IntPtr(size), out context.NULL);
+
+    if (error == ComputeErrorCode.Success)
+    {
+        free_list_insert(ref context, size, mem, tag);
+    }
+
+    return error;
+}
+
+void free_list_insert(ref futhark_context context, long size, CLMemoryHandle mem, string tag)
+{
+    int i = free_list_find_invalid(ref context);
+    if (i == context.free_list.capacity)
+    {
+        var cap = context.free_list.capacity;
+        int new_capacity = cap * 2;
+        Array.Resize(ref context.free_list.entries, new_capacity);
+        for (int j = 0; j < cap; j++)
+        {
+            var entry = new opencl_free_list_entry();
+            entry.valid = false;
+            context.free_list.entries[cap + j] = entry;
+        }
+
+        context.free_list.capacity *= 2;
+    }
+
+    context.free_list.entries[i].valid = true;
+    context.free_list.entries[i].size = size;
+    context.free_list.entries[i].tag = tag;
+    context.free_list.entries[i].mem = mem;
+}
+
+int free_list_find_invalid(ref futhark_context context)
+{
+    int i;
+    for (i = 0; i < context.free_list.capacity; i++)
+    {
+        if (!context.free_list.entries[i].valid)
+        {
+            break;
+        }
+    }
+
+    return i;
+}
 
 struct opencl_memblock
 {
@@ -155,21 +273,30 @@ struct opencl_free_list_entry
 
 struct opencl_free_list
 {
-    public List<opencl_free_list_entry> entries;
+    public opencl_free_list_entry[] entries;
     public int capacity;
     public int used;
 }
+
 
 opencl_free_list opencl_free_list_init()
 {
     int CAPACITY = 30; // arbitrarily chosen
     var free_list = new opencl_free_list();
-    free_list.entries = new List<opencl_free_list_entry>(CAPACITY);
+    free_list.entries = Enumerable.Range(0, CAPACITY)
+        .Select<int, opencl_free_list_entry>(_ =>
+                {
+                    var entry = new opencl_free_list_entry();
+                    entry.valid = false;
+                    return entry;
+                }).ToArray();
+
     free_list.capacity = CAPACITY;
     free_list.used = 0;
 
     return free_list;
 }
+
 
 void opencl_config_init(out opencl_config cfg,
                         int num_sizes,
