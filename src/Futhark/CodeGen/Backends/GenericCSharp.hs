@@ -73,6 +73,7 @@ import Data.Maybe
 import Data.List
 import qualified Data.Map.Strict as M
 import qualified Data.DList as DL
+import qualified Data.Semigroup as Sem
 
 import Futhark.Representation.Primitive hiding (Bool)
 import Futhark.MonadFreshNames
@@ -172,6 +173,19 @@ data CompilerEnv op s = CompilerEnv {
   , envFtable     :: M.Map Name [Imp.Type]
 }
 
+data CompilerAcc op s = CompilerAcc {
+    accItems :: [CSStmt]
+  , accDeclaredMem :: [(VName,Space)]
+  }
+
+instance Sem.Semigroup (CompilerAcc op s) where
+  CompilerAcc items1 declared1 <> CompilerAcc items2 declared2 =
+    CompilerAcc (items1<>items2) (declared1<>declared2)
+
+instance Monoid (CompilerAcc op s) where
+  mempty = CompilerAcc mempty mempty
+  mappend = (Sem.<>)
+
 envOpCompiler :: CompilerEnv op s -> OpCompiler op s
 envOpCompiler = opsCompiler . envOperations
 
@@ -222,24 +236,27 @@ newCompilerState src s = CompilerState { compNameSrc = src
                                        , compMemberDecls = []
                                        , compUserState = s }
 
-newtype CompilerM op s a = CompilerM (RWS (CompilerEnv op s) [CSStmt] (CompilerState s) a)
+newtype CompilerM op s a = CompilerM (RWS (CompilerEnv op s) (CompilerAcc op s) (CompilerState s) a)
   deriving (Functor, Applicative, Monad,
             MonadState (CompilerState s),
             MonadReader (CompilerEnv op s),
-            MonadWriter [CSStmt])
+            MonadWriter (CompilerAcc op s))
 
 instance MonadFreshNames (CompilerM op s) where
   getNameSource = gets compNameSrc
   putNameSource src = modify $ \s -> s { compNameSrc = src }
+
 collect :: CompilerM op s () -> CompilerM op s [CSStmt]
 collect m = pass $ do
   ((), w) <- listen m
-  return (w, const mempty)
+  return (accItems w,
+          const w { accItems = mempty} )
 
 collect' :: CompilerM op s a -> CompilerM op s (a, [CSStmt])
 collect' m = pass $ do
   (x, w) <- listen m
-  return ((x, w), const mempty)
+  return ((x, accItems w),
+          const w { accItems = mempty})
 
 beforeParse :: CSStmt -> CompilerM op s ()
 beforeParse x = modify $ \s ->
@@ -256,8 +273,11 @@ addMemberDecl x = modify $ \s ->
 contextFinalInits :: CompilerM op s [CSStmt]
 contextFinalInits = gets compInit
 
+item :: CSStmt -> CompilerM op s ()
+item x = tell $ mempty { accItems = [x] }
+
 stm :: CSStmt -> CompilerM op s ()
-stm x = tell [x]
+stm x = item x
 
 stms :: [CSStmt] -> CompilerM op s ()
 stms = mapM_ stm
@@ -414,7 +434,7 @@ compileProg module_name constructor imports defines ops userstate boilerplate pr
                        [StaticFunDef $ Def "Main" VoidT [(string_arrayT,"args")] main_entry]])
 
 
-  
+
         string_arrayT = Composite $ ArrayT $ Primitive StringT
         main_entry :: [CSStmt]
         main_entry = [ Assign (Var "internal_instance") (simpleInitClass "FutharkInternal" [Var "args"])
@@ -463,7 +483,7 @@ compileProg module_name constructor imports defines ops userstate boilerplate pr
 
 compileFunc :: (Name, Imp.Function op) -> CompilerM op s CSFunDef
 compileFunc (fname, Imp.Function _ outputs inputs body _ _) = do
-  body' <- collect $ compileCode body
+  body' <- blockScope $ compileCode body
   let inputs' = map compileTypedInput inputs
   let outputs' = map compileOutput outputs
   let outputDecls = map getDefaultDecl outputs
@@ -1163,8 +1183,8 @@ compileCode (Imp.Op op) =
 
 compileCode (Imp.If cond tb fb) = do
   cond' <- compileExp cond
-  tb' <- collect $ compileCode tb
-  fb' <- collect $ compileCode fb
+  tb' <- blockScope $ compileCode tb
+  fb' <- blockScope $ compileCode fb
   stm $ If cond' tb' fb'
 
 compileCode (c1 Imp.:>>: c2) = do
@@ -1173,13 +1193,13 @@ compileCode (c1 Imp.:>>: c2) = do
 
 compileCode (Imp.While cond body) = do
   cond' <- compileExp cond
-  body' <- collect $ compileCode body
+  body' <- blockScope $ compileCode body
   stm $ While cond' body'
 
 compileCode (Imp.For i it bound body) = do
   bound' <- compileExp bound
   let i' = compileName i
-  body' <- collect $ compileCode body
+  body' <- blockScope $ compileCode body
   counter <- pretty <$> newVName "counter"
   one <- pretty <$> newVName "one"
   stm $ Assign (Var i') $ simpleCall (compileTypeConverter (IntType it)) [Integer 0]
@@ -1217,7 +1237,7 @@ compileCode (Imp.DeclareArray name (Space space) t vs) =
   pure name <*> pure space <*> pure t <*> pure vs
 
 compileCode (Imp.Comment s code) = do
-  code' <- collect $ compileCode code
+  code' <- blockScope $ compileCode code
   stm $ Comment s code'
 
 compileCode (Imp.Assert e msg (loc,locs)) = do
@@ -1294,10 +1314,19 @@ blockScope = fmap snd . blockScope'
 blockScope' :: CompilerM op s a -> CompilerM op s (a, [CSStmt])
 blockScope' m = pass $ do
   (x, w) <- listen m
-  let items = DL.toList $ accItems w
+  let items = accItems w
   releases <- collect $ mapM_ (uncurry unRefMem) $ accDeclaredMem w
   return ((x, items ++ releases),
           const mempty)
+
+unRefMem :: VName -> Space -> CompilerM op s CSStmt
+unRefMem mem (Space "device") =
+  (return . Exp) $ simpleCall "MemblockUnrefDevice" [ Ref $ Var "ctx"
+                                                    , (Ref . Var . compileName) mem
+                                                    , (String . compileName) mem]
+unRefMem _ DefaultSpace = return Pass
+
+unRefMem _ (Space _) = fail "The default compiler cannot compile unRefMem for other spaces"
 
 
 -- | Public names must have a consitent prefix.
@@ -1305,7 +1334,9 @@ publicName :: String -> String
 publicName s = "futhark_" ++ s
 
 declMem :: VName -> Space -> CompilerM op s ()
-declMem name space = stm $ declMem' (compileName name) space
+declMem name space = do
+  stm $ declMem' (compileName name) space
+  tell $ mempty { accDeclaredMem = [(name, space)]}
 
 declMem' :: String -> Space -> CSStmt
 declMem' name DefaultSpace =
