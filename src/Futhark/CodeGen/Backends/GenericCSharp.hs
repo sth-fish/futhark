@@ -277,7 +277,7 @@ item :: CSStmt -> CompilerM op s ()
 item x = tell $ mempty { accItems = [x] }
 
 stm :: CSStmt -> CompilerM op s ()
-stm x = item x
+stm = item
 
 stms :: [CSStmt] -> CompilerM op s ()
 stms = mapM_ stm
@@ -874,7 +874,7 @@ prepareEntry (fname, Imp.Function _ outputs inputs _ results args) = do
   where liftMaybe (Just a, b) = Just (a,b)
         liftMaybe _ = Nothing
 
-        initCopy (varName, Imp.MemParam _ space) = declMem' varName space
+        -- initCopy (varName, Imp.MemParam _ space) = declMem' varName space
         initCopy _ = Pass
 
 copyMemoryDefaultSpace :: VName -> CSExp -> VName -> CSExp -> CSExp ->
@@ -1269,7 +1269,8 @@ compileCode (Imp.Allocate name (Imp.Count e) DefaultSpace) = do
   let name' = Var (compileName name)
   stm $ Reassign name' allocate'
 
-compileCode (Imp.Allocate name (Imp.Count e) (Imp.Space space)) =
+compileCode (Imp.Allocate name (Imp.Count e) (Imp.Space space)) = do
+  tell $ mempty { accDeclaredMem = [(name, Space space)]}
   join $ asks envAllocate
     <*> pure name
     <*> compileExp e
@@ -1315,8 +1316,9 @@ blockScope' :: CompilerM op s a -> CompilerM op s (a, [CSStmt])
 blockScope' m = pass $ do
   (x, w) <- listen m
   let items = accItems w
-  releases <- collect $ mapM_ (uncurry unRefMem) $ accDeclaredMem w
-  return ((x, items ++ releases),
+  releases <- mapM (uncurry unRefMem) $ accDeclaredMem w
+  let prut = Comment ("WOAH DUDE" ++ (show . length $ accDeclaredMem w)) []
+  return ((x, prut : items ++ releases),
           const mempty)
 
 unRefMem :: VName -> Space -> CompilerM op s CSStmt
@@ -1325,7 +1327,6 @@ unRefMem mem (Space "device") =
                                                     , (Ref . Var . compileName) mem
                                                     , (String . compileName) mem]
 unRefMem _ DefaultSpace = return Pass
-
 unRefMem _ (Space _) = fail "The default compiler cannot compile unRefMem for other spaces"
 
 
@@ -1336,13 +1337,12 @@ publicName s = "futhark_" ++ s
 declMem :: VName -> Space -> CompilerM op s ()
 declMem name space = do
   stm $ declMem' (compileName name) space
-  tell $ mempty { accDeclaredMem = [(name, space)]}
 
 declMem' :: String -> Space -> CSStmt
 declMem' name DefaultSpace =
   AssignTyped (Composite $ ArrayT $ Primitive ByteT) (Var name) Nothing
 declMem' name (Space _) =
-  AssignTyped (CustomT "opencl_memblock") (Var name) (Just $ Var "ctx.EMPTY_MEMBLOCK")
+  Comment "BOOP" [AssignTyped (CustomT "opencl_memblock") (Var name) (Just $ Var "ctx.EMPTY_MEMBLOCK")]
 
 memToCSType :: Space -> CompilerM op s CSType
 memToCSType = return . rawMemCSType

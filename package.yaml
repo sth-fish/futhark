@@ -13,6 +13,7 @@ ghc-options: -Wall -Wcompat -Wredundant-constraints -Wincomplete-record-updates
 extra-source-files:
   - rts/python/*.py
   - rts/c/*.h
+  - rts/csharp/*.cs
 
   - futlib/*.fut
 

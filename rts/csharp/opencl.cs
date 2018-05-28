@@ -43,9 +43,10 @@ struct opencl_config
     public string[] size_classes;
 }
 
-void MemblockUnrefDevice(ref futhark_context context, ref opencl_memblock block, string desc)
+void MemblockUnrefDevice(ref futhark_context
+ context, ref opencl_memblock block, string desc)
 {
-    if (block.references != 0)
+    if (!block.is_null)
     {
         block.decrease_refs();
         if (context.detail_memory)
@@ -59,6 +60,7 @@ void MemblockUnrefDevice(ref futhark_context context, ref opencl_memblock block,
         {
             context.cur_mem_usage_device -= block.size;
             OPENCL_SUCCEED(OpenCLFree(ref context, block.mem, block.tag));
+            block.is_null = true;
         }
 
         if (context.detail_memory)
@@ -78,7 +80,7 @@ void MemblockSetDevice(ref futhark_context context,
     lhs = rhs;
 }
 
-void MemblockAllocDevice(ref futhark_context context, ref opencl_memblock block, long size, string desc)
+opencl_memblock MemblockAllocDevice(ref futhark_context context, opencl_memblock block, long size, string desc)
 {
     if (size < 0)
     {
@@ -93,8 +95,8 @@ void MemblockAllocDevice(ref futhark_context context, ref opencl_memblock block,
 
     OPENCL_SUCCEED(OpenCLAlloc(ref context, size, desc, ref block.mem));
 
-    block = new opencl_memblock();
     block.references = 1;
+    block.is_null = false;
     block.size = size;
     block.tag = desc;
     context.cur_mem_usage_device += size;
@@ -117,6 +119,8 @@ void MemblockAllocDevice(ref futhark_context context, ref opencl_memblock block,
     {
         Console.Error.Write(".\n");
     }
+
+    return block;
 }
 
 
@@ -240,6 +244,7 @@ struct opencl_memblock
     public CLMemoryHandle mem;
     public long size;
     public string tag;
+    public bool is_null;
 
     public void increase_refs()
     {
@@ -259,6 +264,7 @@ opencl_memblock empty_memblock(CLMemoryHandle mem)
     block.references = 0;
     block.tag = "";
     block.size = 0;
+    block.is_null = true;
 
     return block;
 }

@@ -144,6 +144,7 @@ generateBoilerplate opencl_code opencl_prelude kernel_names types sizes = do
   CS.atInit $ Exp $ CS.simpleCall new_ctx [Var "cfg"]
   CS.atInit $ Reassign (Var "ctx.EMPTY_MEM_HANDLE") $ CS.simpleCall "empty_mem_handle" [Var "ctx.opencl.context"]
   CS.atInit $ Reassign (Var "ctx.EMPTY_MEMBLOCK") $ CS.simpleCall "empty_memblock" [Var "ctx.EMPTY_MEM_HANDLE"]
+  CS.atInit $ Reassign (Var "ctx.free_list") $ CS.simpleCall "opencl_free_list_init" []
 
   CS.addMemberDecl $ AssignTyped (Primitive BoolT) (Var "synchronous") (Just $ AST.Bool False)
 

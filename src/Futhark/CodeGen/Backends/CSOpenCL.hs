@@ -297,10 +297,11 @@ computeErrCodeT = CustomT "ComputeErrorCode"
 
 allocateOpenCLBuffer :: CS.Allocate Imp.OpenCL ()
 allocateOpenCLBuffer mem size "device" = do
+  let mem' = CS.compileName mem
   CS.stm $ comment "allocatebuffer"
   errcode <- CS.compileName <$> newVName "err_code"
   CS.stm $ AssignTyped computeErrCodeT (Var errcode) Nothing
-  CS.stm $ Exp $ CS.simpleCall "MemblockAllocDevice" [Ref $ Var "ctx", (Ref . Var) $ CS.compileName mem, size, String $ CS.compileName mem]
+  CS.stm $ Reassign (Var mem') (CS.simpleCall "MemblockAllocDevice" [Ref $ Var "ctx", Var mem', size, String mem'])
 
 allocateOpenCLBuffer _ _ space =
   fail $ "Cannot allocate in '" ++ space ++ "' space"
