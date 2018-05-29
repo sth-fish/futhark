@@ -343,7 +343,7 @@ instance Pretty CSStmt where
 
   ppr (ConstructorDef d) = ppr d
 
-  ppr (StructDef name assignments) = text "struct" <+> text name <> braces(stack $ map (\(tp,field) -> text "public" <+> ppr tp <+> text field <> semi) assignments)
+  ppr (StructDef name assignments) = text "public struct" <+> text name <> braces(stack $ map (\(tp,field) -> text "public" <+> ppr tp <+> text field <> semi) assignments)
 
   ppr (CSDecl decl) = text $ show decl
 

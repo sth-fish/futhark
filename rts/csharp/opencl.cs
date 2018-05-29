@@ -21,7 +21,7 @@ void OPENCL_SUCCEED(object return_code,
     opencl_succeed((int) return_code, "", filePath, lineNumber);
 }
 
-struct opencl_config
+public struct opencl_config
 {
     public bool debugging;
     public int preferred_device_num;
@@ -238,7 +238,7 @@ int free_list_find_invalid(ref futhark_context context)
     return i;
 }
 
-struct opencl_memblock
+public struct opencl_memblock
 {
     public int references;
     public CLMemoryHandle mem;
@@ -269,7 +269,7 @@ opencl_memblock empty_memblock(CLMemoryHandle mem)
     return block;
 }
 
-struct opencl_free_list_entry
+public struct opencl_free_list_entry
 {
     public bool valid;
     public CLMemoryHandle mem;
@@ -277,7 +277,7 @@ struct opencl_free_list_entry
     public string tag;
 }
 
-struct opencl_free_list
+public struct opencl_free_list
 {
     public opencl_free_list_entry[] entries;
     public int capacity;
@@ -329,7 +329,7 @@ void opencl_config_init(out opencl_config cfg,
     cfg.size_classes = size_classes;
 }
 
-struct opencl_context {
+public struct opencl_context {
    public CLPlatformHandle platform;
    public CLDeviceHandle device;
    public CLContextHandle context;
@@ -345,7 +345,7 @@ struct opencl_context {
    public int lockstep_width;
 }
 
-struct opencl_device_option {
+public struct opencl_device_option {
     public CLPlatformHandle platform;
     public CLDeviceHandle device;
     public ComputeDeviceTypes device_type;
