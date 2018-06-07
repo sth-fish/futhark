@@ -874,7 +874,7 @@ prepareEntry (fname, Imp.Function _ outputs inputs _ results args) = do
   where liftMaybe (Just a, b) = Just (a,b)
         liftMaybe _ = Nothing
 
-        -- initCopy (varName, Imp.MemParam _ space) = declMem' varName space
+        initCopy (varName, Imp.MemParam _ space) = declMem' varName space
         initCopy _ = Pass
 
 copyMemoryDefaultSpace :: VName -> CSExp -> VName -> CSExp -> CSExp ->
@@ -897,7 +897,7 @@ compileEntryFun entry@(_,Imp.Function _ outputs _ _ results args) = do
     prepareIn ++ outputDecls ++ body_lib ++ prepareOut ++ [ret]
 
   where getType :: Imp.ExternalValue -> CSType
-        getType (Imp.OpaqueValue _ _) = undefined
+        getType (Imp.OpaqueValue desc _) = CustomT desc
         getType (Imp.TransparentValue (Imp.ScalarValue primtype signedness _)) =
           compilePrimTypeToASText primtype signedness
         getType (Imp.TransparentValue (Imp.ArrayValue _ _ _ primtype signedness _)) =
@@ -1335,7 +1335,7 @@ publicName :: String -> String
 publicName s = "futhark_" ++ s
 
 declMem :: VName -> Space -> CompilerM op s ()
-declMem name space = do
+declMem name space =
   stm $ declMem' (compileName name) space
 
 declMem' :: String -> Space -> CSStmt
