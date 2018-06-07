@@ -614,16 +614,14 @@ badInput i e t =
   where err_msg = unlines [ "Argument #" ++ show i ++ " has invalid value"
                           , "Futhark type: {}"
                           , "Type of given C# value: {}" ]
+
 getCSExpType :: CSExp -> CSExp
 getCSExpType e = Field (callMethod e "GetType" []) "Name"
 
 entryPointInput :: (Int, Imp.ExternalValue, CSExp) -> CompilerM op s ()
-entryPointInput (i, Imp.OpaqueValue desc vs, e) = do
-  let type_is_ok = BinOp "&&" (BinOp "is" e (Var "Opaque"))
-                               (BinOp "==" (Field e "desc") (String desc))
-  stm $ If (UnOp "!" type_is_ok) [badInput i (getCSExpType e) desc] []
+entryPointInput (i, Imp.OpaqueValue _ vs, e) =
   mapM_ entryPointInput $ zip3 (repeat i) (map Imp.TransparentValue vs) $
-    map (Index (Field e "Item1") . IdxExp . Integer) [0..]
+    map (\idx -> Field e $ "Item" ++ show idx) [1..]
 
 entryPointInput (_, Imp.TransparentValue (Imp.ScalarValue bt _ name), e) = do
   let vname' = Var $ compileName name
@@ -897,10 +895,16 @@ compileEntryFun entry@(_,Imp.Function _ outputs _ _ results args) = do
     prepareIn ++ outputDecls ++ body_lib ++ prepareOut ++ [ret]
 
   where getType :: Imp.ExternalValue -> CSType
-        getType (Imp.OpaqueValue desc _) = CustomT desc
-        getType (Imp.TransparentValue (Imp.ScalarValue primtype signedness _)) =
+        getType (Imp.OpaqueValue _ valueDescs) =
+          let valueDescs' = map getType' valueDescs
+          in Composite $ TupleT valueDescs'
+        getType (Imp.TransparentValue valueDesc) =
+          getType' valueDesc
+
+        getType' :: Imp.ValueDesc -> CSType
+        getType' (Imp.ScalarValue primtype signedness _) =
           compilePrimTypeToASText primtype signedness
-        getType (Imp.TransparentValue (Imp.ArrayValue _ _ _ primtype signedness _)) =
+        getType' (Imp.ArrayValue _ _ _ primtype signedness _) =
           let t = compilePrimTypeToASText primtype signedness
           in Composite $ TupleT [Composite $ ArrayT t, Composite $ ArrayT $ Primitive $ CSInt Int64T]
 
