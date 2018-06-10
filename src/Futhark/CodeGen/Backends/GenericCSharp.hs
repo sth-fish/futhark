@@ -489,7 +489,7 @@ compileFunc (fname, Imp.Function _ outputs inputs body _ _) = do
   let outputDecls = map getDefaultDecl outputs
   let (ret, retType) = unzip outputs'
   let retType' = tupleOrSingleT retType
-  let ret' = [Return $ tupleOrSingle ret]
+  let ret' = [Return $ tupleOrSingleReturn ret]
 
   case outputs of
     [] -> return $ Def (futharkFun . nameToString $ fname) VoidT inputs' (outputDecls++body')
@@ -501,13 +501,17 @@ compileTypedInput input = (typeFun input, nameFun input)
   where nameFun = compileName . Imp.paramName
         typeFun = compileType . paramType
 
-tupleOrSingle :: [CSExp] -> CSExp
-tupleOrSingle [e] = e
-tupleOrSingle es = Tuple es
+tupleOrSingleReturn :: [CSExp] -> CSExp
+tupleOrSingleReturn [e] = e
+tupleOrSingleReturn es = CreateTuple es
 
 tupleOrSingleT :: [CSType] -> CSType
 tupleOrSingleT [e] = e
 tupleOrSingleT es = Composite $ TupleT es
+
+tupleOrSingle :: [CSExp] -> CSExp
+tupleOrSingle [e] = e
+tupleOrSingle es = Tuple es
 
 assignArrayPointer :: CSExp -> CSExp -> CSStmt
 assignArrayPointer e ptr =

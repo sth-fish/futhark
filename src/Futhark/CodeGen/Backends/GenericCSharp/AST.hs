@@ -40,7 +40,7 @@ instance Pretty ArgMemType where
 
 instance Pretty CSComp where
   ppr (ArrayT t) = ppr t <> text "[]"
-  ppr (TupleT ts) = parens(commasep $ map ppr ts)
+  ppr (TupleT ts) = text "Tuple" <> angles(commasep $ map ppr ts)
 
 data CSInt = Int8T
            | Int16T
@@ -148,6 +148,7 @@ data CSExp = Integer Integer
            | CreateArray CSType [CSExp]
            | AllocArray CSType CSExp
            | Cast CSType CSExp
+           | CreateTuple [CSExp]
            | Tuple [CSExp]
            | Array [CSExp]
            | Field CSExp String
@@ -184,6 +185,7 @@ instance Pretty CSExp where
   ppr (CallMethod obj method args) = ppr obj <> dot <> ppr method <> parens(commasep $ map ppr args)
   ppr (CreateObject className args) = text "new" <+> ppr className <> parens(commasep $ map ppr args)
   ppr (CreateArray t vs) = text "new" <+> ppr t <> text "[]" <+> braces(commasep $ map ppr vs)
+  ppr (CreateTuple exps) = text "Tuple.Create" <> parens(commasep $ map ppr exps)
   ppr (Tuple exps) = parens(commasep $ map ppr exps)
   ppr (Array exps) = braces(commasep $ map ppr exps) -- uhoh is this right?
   ppr (Field obj field) = ppr obj <> dot <> text field

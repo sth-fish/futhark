@@ -364,7 +364,7 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
     return new FlatArray<bool>(boolArray, shape);
 }
 
-(byte[], long[]) createTuple_byte(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
+Tuple<byte[], long[]> createTuple_byte(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
                                  int nbytes, long[] shape)
 {
     var byteArray = new byte[nbytes];
@@ -378,17 +378,17 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
                                    );
         }
     }
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
 
-(byte[], long[]) createTuple_byte(byte[] bytes, long[] shape)
+Tuple<byte[], long[]> createTuple_byte(byte[] bytes, long[] shape)
 {
     var byteArray = new byte[bytes.Length / sizeof(byte)];
     Buffer.BlockCopy(bytes, 0, byteArray, 0, bytes.Length);
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
 
-(ushort[], long[]) createTuple_ushort(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
+Tuple<ushort[], long[]> createTuple_ushort(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
                                    int nbytes, long[] shape)
 {
     var byteArray = new ushort[nbytes / sizeof(ushort)];
@@ -402,20 +402,20 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
                                    );
         }
     }
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
 
-(ushort[], long[]) createTuple_ushort(byte[] bytes, long[] shape)
+Tuple<ushort[], long[]> createTuple_ushort(byte[] bytes, long[] shape)
 {
     var ushortArray = new ushort[bytes.Length / sizeof(ushort)];
     Buffer.BlockCopy(bytes, 0, ushortArray, 0, bytes.Length);
-    return (ushortArray, shape);
+    return Tuple.Create(ushortArray, shape);
 }
 
 
 
 
-(uint[], long[]) createTuple_uint(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
+Tuple<uint[], long[]> createTuple_uint(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
                                    int nbytes, long[] shape)
 {
     var byteArray = new uint[nbytes / sizeof(uint)];
@@ -429,16 +429,16 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
                                    );
         }
     }
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
-(uint[], long[]) createTuple_uint(byte[] bytes, long[] shape)
+Tuple<uint[], long[]> createTuple_uint(byte[] bytes, long[] shape)
 {
     var uintArray = new uint[bytes.Length / sizeof(uint)];
     Buffer.BlockCopy(bytes, 0, uintArray, 0, bytes.Length);
-    return (uintArray, shape);
+    return Tuple.Create(uintArray, shape);
 }
 
-(ulong[], long[]) createTuple_ulong(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
+Tuple<ulong[], long[]> createTuple_ulong(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
                                  int nbytes, long[] shape)
 {
     var byteArray = new ulong[nbytes / sizeof(ulong)];
@@ -452,17 +452,17 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
                                    );
         }
     }
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
 
-(ulong[], long[]) createTuple_ulong(byte[] bytes, long[] shape)
+Tuple<ulong[], long[]> createTuple_ulong(byte[] bytes, long[] shape)
 {
     var ulongArray = new ulong[bytes.Length / sizeof(ulong)];
     Buffer.BlockCopy(bytes, 0, ulongArray, 0, bytes.Length);
-    return (ulongArray, shape);
+    return Tuple.Create(ulongArray, shape);
 }
 
-(sbyte[], long[]) createTuple_sbyte(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
+Tuple<sbyte[], long[]> createTuple_sbyte(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
                                   int nbytes, long[] shape)
 {
     var byteArray = new sbyte[nbytes / sizeof(sbyte)];
@@ -476,17 +476,17 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
                                    );
         }
     }
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
 
-(sbyte[], long[]) createTuple_sbyte(byte[] bytes, long[] shape)
+Tuple<sbyte[], long[]> createTuple_sbyte(byte[] bytes, long[] shape)
 {
     var sbyteArray = new sbyte[bytes.Length / sizeof(sbyte)];
     Buffer.BlockCopy(bytes, 0, sbyteArray, 0, bytes.Length);
-    return (sbyteArray, shape);
+    return Tuple.Create(sbyteArray, shape);
 }
 
-(short[], long[]) createTuple_short(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
+Tuple<short[], long[]> createTuple_short(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
                                   int nbytes, long[] shape)
 {
     var byteArray = new short[nbytes / sizeof(short)];
@@ -500,17 +500,17 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
                                    );
         }
     }
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
 
-(short[], long[]) createTuple_short(byte[] bytes, long[] shape)
+Tuple<short[], long[]> createTuple_short(byte[] bytes, long[] shape)
 {
     var shortArray = new short[bytes.Length / sizeof(short)];
     Buffer.BlockCopy(bytes, 0, shortArray, 0, bytes.Length);
-    return (shortArray, shape);
+    return Tuple.Create(shortArray, shape);
 }
 
-(int[], long[]) createTuple_int(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
+Tuple<int[], long[]> createTuple_int(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
                                   int nbytes, long[] shape)
 {
     var byteArray = new int[nbytes / sizeof(int)];
@@ -524,17 +524,17 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
                                    );
         }
     }
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
 
-(int[], long[]) createTuple_int(byte[] bytes, long[] shape)
+Tuple<int[], long[]> createTuple_int(byte[] bytes, long[] shape)
 {
     var intArray = new int[bytes.Length / sizeof(int)];
     Buffer.BlockCopy(bytes, 0, intArray, 0, bytes.Length);
-    return (intArray, shape);
+    return Tuple.Create(intArray, shape);
 }
 
-(long[], long[]) createTuple_long(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
+Tuple<long[], long[]> createTuple_long(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
                                 int nbytes, long[] shape)
 {
     var byteArray = new long[nbytes / sizeof(long)];
@@ -548,16 +548,16 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
                                    );
         }
     }
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
-(long[], long[]) createTuple_long(byte[] bytes, long[] shape)
+Tuple<long[], long[]> createTuple_long(byte[] bytes, long[] shape)
 {
     var longArray = new long[bytes.Length / sizeof(long)];
     Buffer.BlockCopy(bytes, 0, longArray, 0, bytes.Length);
-    return (longArray, shape);
+    return Tuple.Create(longArray, shape);
 }
 
-(float[], long[]) createTuple_float(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
+Tuple<float[], long[]> createTuple_float(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
                                  int nbytes, long[] shape)
 {
     var byteArray = new float[nbytes / sizeof(float)];
@@ -571,16 +571,16 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
                                    );
         }
     }
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
-(float[], long[]) createTuple_float(byte[] bytes, long[] shape)
+Tuple<float[], long[]> createTuple_float(byte[] bytes, long[] shape)
 {
     var floatArray = new float[bytes.Length / sizeof(float)];
     Buffer.BlockCopy(bytes, 0, floatArray, 0, bytes.Length);
-    return (floatArray, shape);
+    return Tuple.Create(floatArray, shape);
 }
 
-(double[], long[]) createTuple_double(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
+Tuple<double[], long[]> createTuple_double(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
                                  int nbytes, long[] shape)
 {
     var byteArray = new double[nbytes / sizeof(double)];
@@ -594,17 +594,17 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
                                    );
         }
     }
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
 
-(double[], long[]) createTuple_double(byte[] bytes, long[] shape)
+Tuple<double[], long[]> createTuple_double(byte[] bytes, long[] shape)
 {
     var doubleArray = new double[bytes.Length / sizeof(double)];
     Buffer.BlockCopy(bytes, 0, doubleArray, 0, bytes.Length);
-    return (doubleArray, shape);
+    return Tuple.Create(doubleArray, shape);
 }
 
-(bool[], long[]) createTuple_bool(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
+Tuple<bool[], long[]> createTuple_bool(CLMemoryHandle mem, CLCommandQueueHandle queue, bool synchronous,
                                  int nbytes, long[] shape)
 {
     var byteArray = new bool[nbytes / sizeof(bool)];
@@ -618,13 +618,13 @@ FlatArray<bool> createArray_bool(byte[] bytes, long[] shape)
                                    );
         }
     }
-    return (byteArray, shape);
+    return Tuple.Create(byteArray, shape);
 }
-(bool[], long[]) createTuple_bool(byte[] bytes, long[] shape)
+Tuple<bool[], long[]> createTuple_bool(byte[] bytes, long[] shape)
 {
     var boolArray = new bool[bytes.Length / sizeof(bool)];
     Buffer.BlockCopy(bytes, 0, boolArray, 0, bytes.Length);
-    return (boolArray, shape);
+    return Tuple.Create(boolArray, shape);
 }
 
 
