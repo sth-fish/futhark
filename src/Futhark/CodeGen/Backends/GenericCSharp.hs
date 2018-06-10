@@ -489,7 +489,7 @@ compileFunc (fname, Imp.Function _ outputs inputs body _ _) = do
   let outputDecls = map getDefaultDecl outputs
   let (ret, retType) = unzip outputs'
   let retType' = tupleOrSingleT retType
-  let ret' = [Return $ tupleOrSingleReturn ret]
+  let ret' = [Return $ tupleOrSingle ret]
 
   case outputs of
     [] -> return $ Def (futharkFun . nameToString $ fname) VoidT inputs' (outputDecls++body')
@@ -501,9 +501,13 @@ compileTypedInput input = (typeFun input, nameFun input)
   where nameFun = compileName . Imp.paramName
         typeFun = compileType . paramType
 
-tupleOrSingleReturn :: [CSExp] -> CSExp
-tupleOrSingleReturn [e] = e
-tupleOrSingleReturn es = CreateTuple es
+tupleOrSingleEntryT :: [CSType] -> CSType
+tupleOrSingleEntryT [e] = e
+tupleOrSingleEntryT es = Composite $ SystemTupleT es
+
+tupleOrSingleEntry :: [CSExp] -> CSExp
+tupleOrSingleEntry [e] = e
+tupleOrSingleEntry es = CreateSystemTuple es
 
 tupleOrSingleT :: [CSType] -> CSType
 tupleOrSingleT [e] = e
@@ -864,7 +868,7 @@ prepareEntry (fname, Imp.Function _ outputs inputs _ results args) = do
       fname' = futharkFun (nameToString fname)
       arg_types = map (fst . compileTypedInput) inputs
       inputs' = zip arg_types (map extValueDescName args)
-      output_type = tupleOrSingleT output_types
+      output_type = tupleOrSingleEntryT output_types
       call_lib = [Reassign funTuple $ simpleCall fname' (fmap Var argexps_lib)]
       call_bin = [Reassign funTuple $ simpleCall fname' (fmap Var argexps_bin)]
       prepareIn' = prepareIn ++ mem_copy_inits ++ sizeDecls
@@ -890,10 +894,10 @@ compileEntryFun :: (Name, Imp.Function op)
                 -> CompilerM op s CSFunDef
 compileEntryFun entry@(_,Imp.Function _ outputs _ _ results args) = do
   let params = map (getType &&& extValueDescName) args
-  let outputType = tupleOrSingleT $ map getType results
+  let outputType = tupleOrSingleEntryT $ map getType results
 
   (fname', _, _, prepareIn, body_lib, _, prepareOut, res, _) <- prepareEntry entry
-  let ret = Return $ tupleOrSingle $ map snd res
+  let ret = Return $ tupleOrSingleEntry $ map snd res
   let outputDecls = map getDefaultDecl outputs
   return $ Def fname' outputType params $
     prepareIn ++ outputDecls ++ body_lib ++ prepareOut ++ [ret]
@@ -901,7 +905,7 @@ compileEntryFun entry@(_,Imp.Function _ outputs _ _ results args) = do
   where getType :: Imp.ExternalValue -> CSType
         getType (Imp.OpaqueValue _ valueDescs) =
           let valueDescs' = map getType' valueDescs
-          in Composite $ TupleT valueDescs'
+          in Composite $ SystemTupleT valueDescs'
         getType (Imp.TransparentValue valueDesc) =
           getType' valueDesc
 
@@ -910,7 +914,7 @@ compileEntryFun entry@(_,Imp.Function _ outputs _ _ results args) = do
           compilePrimTypeToASText primtype signedness
         getType' (Imp.ArrayValue _ _ _ primtype signedness _) =
           let t = compilePrimTypeToASText primtype signedness
-          in Composite $ TupleT [Composite $ ArrayT t, Composite $ ArrayT $ Primitive $ CSInt Int64T]
+          in Composite $ SystemTupleT [Composite $ ArrayT t, Composite $ ArrayT $ Primitive $ CSInt Int64T]
 
 
 callEntryFun :: [CSStmt] -> (Name, Imp.Function op)
